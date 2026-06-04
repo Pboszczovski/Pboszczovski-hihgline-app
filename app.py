@@ -40,8 +40,19 @@ try:
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
-    st.error(f"Erro ao acessar as tabelas do Google Sheets. Detalhes técnicos: {e}")
+    st.error(
+        f"Erro ao acessar as tabelas do Google Sheets. \n\n"
+        f"IMPORTANTE: Certifique-se de que a planilha foi compartilhada como 'Qualquer pessoa com o link pode ler'.\n\n"
+        f"Detalhes técnicos: {e}"
+    )
     st.stop()
+
+# Indicadores na Barra Lateral (Sidebar) com base no tamanho real dos DataFrames
+total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]) if df_alunos is not None and "Status" in df_alunos.columns else len(df_alunos) if df_alunos is not None else 0
+total_espera = len(df_espera) if df_espera is not None else 0
+
+st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
+st.sidebar.metric(label="Fila de Espera", value=total_espera)
 
 # Título Principal do App
 st.title("Sistema de Gestão Integrada")
@@ -56,13 +67,6 @@ tab_agenda, tab_alunos, tab_financeiro, tab_espera, tab_novos = st.tabs([
     "⏳ Lista de Espera", 
     "➕ Novos Cadastros"
 ])
-
-# Indicadores na Barra Lateral (Sidebar) com base no tamanho real dos DataFrames
-total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]) if df_alunos is not None and "Status" in df_alunos.columns else len(df_alunos) if df_alunos is not None else 0
-total_espera = len(df_espera) if df_espera is not None else 0
-
-st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
-st.sidebar.metric(label="Fila de Espera", value=total_espera)
 
 # ==========================================
 # 1. ABA: AGENDA DO DIA
@@ -172,4 +176,25 @@ with tab_novos:
             dia_vencimento = st.number_input("Dia do Vencimento:", min_value=1, max_value=31, value=10, step=1)
             
         dias_aula = st.text_input("Dias de Aula (ex: Ter/Qui):")
-        horario_escolhido = st.text_input("Hor
+        horario_escolhido = st.text_input("Horário Escolhido (ex: 19:30):")
+        
+        botao_validar = st.form_submit_button("Validar Dados")
+        
+        if botao_validar:
+            if nome_completo and whatsapp:
+                st.success(f"🎉 Dados validados com sucesso para **{nome_completo}**!")
+                
+                nova_linha = {
+                    "Nome": nome_completo,
+                    "Telefone": whatsapp,
+                    "Bairro": bairro,
+                    "Plano": modalidade,
+                    "Valor": preco_mensal,
+                    "Vencimento": dia_vencimento,
+                    "Dias": dias_aula,
+                    "Horario": horario_escolhido,
+                    "Status": "Ativo"
+                }
+                st.json(nova_linha)
+            else:
+                st.error("⚠️ Por favor, preencha os campos obrigatórios (Nome Completo e WhatsApp).")
