@@ -20,16 +20,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. CONEXÃO DIRETA COM O ID REAL DA SUA PLANILHA
-# ATENÇÃO: Substitua o texto abaixo pelo ID real que você copiou da sua URL!
-SPREADSHEET_ID = "130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
+# 2. CONEXÃO DIRETA COM O ID CORRIGIDO (Usando a letra O maiúscula)
+SPREADSHEET_ID = "13OigffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
-@st.cache_data(ttl=5)  # Sincroniza e atualiza os dados a cada 5 segundos
+@st.cache_data(ttl=5)  # Atualiza os dados a cada 5 segundos se houver mudanças
 def carregar_dados(nome_aba):
     url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
     try:
         df = pd.read_csv(url)
-        # Remove colunas ou linhas fantasmas totalmente vazias que o Google Sheets gera
+        # Limpa linhas e colunas fantasmas geradas pelo Sheets
         df = df.dropna(how='all', axis=1)
         df = df.dropna(how='all', axis=0)
         return df
@@ -37,7 +36,7 @@ def carregar_dados(nome_aba):
         st.error(f"Erro ao ler a aba '{nome_aba}': {e}")
         return pd.DataFrame()
 
-# Chamada das abas com os nomes idênticos aos do seu Google Sheets
+# Chamada das abas exatamente como estão escritas na sua planilha
 df_alunos = carregar_dados("alunos")
 df_financeiro = carregar_dados("financeiro")
 df_espera = carregar_dados("espera")
@@ -46,7 +45,7 @@ df_espera = carregar_dados("espera")
 if not df_alunos.empty or not df_financeiro.empty or not df_espera.empty:
     st.sidebar.success("📊 Banco de dados sincronizado!")
 else:
-    st.sidebar.error("❌ Erro de leitura. Verifique se o ID inserido na linha 24 está correto.")
+    st.sidebar.error("❌ Erro de leitura. Verifique as abas da planilha.")
 
 # 3. BARRA LATERAL (SIDEBAR) ORIGINAL
 st.sidebar.title("🏋️‍♂️ Studio Highline")
@@ -54,13 +53,13 @@ st.sidebar.subheader("Painel de Controle v1.0")
 hoje = datetime.now().strftime("%d/%m/%Y")
 st.sidebar.info(f"📅 Data: {hoje}")
 
-# Métricas rápidas no painel lateral
+# Métricas rápidas no painel lateral baseado nas linhas reais da planilha
 if not df_alunos.empty:
     st.sidebar.metric("Alunos Cadastrados", len(df_alunos))
 if not df_espera.empty:
     st.sidebar.metric("Fila de Espera", len(df_espera))
 
-# 4. CORPO PRINCIPAL - TODAS AS 5 ABAS ORIGINAIS RESTAURADAS
+# 4. CORPO PRINCIPAL - AS 5 ABAS DA INTERFACE
 st.title("Sistema de Gestão Integrada")
 st.markdown("---")
 
