@@ -20,15 +20,16 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. CONEXÃO DIRETA COM O ID CORRETO DA PLANILHA
+# 2. CONEXÃO DIRETA COM O ID CORRIGIDO DA PLANILHA
+# Alterado rigidamente para "13O" (letra O) para evitar o erro 404
 SPREADSHEET_ID = "13OigffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
-@st.cache_data(ttl=10)  # Sincroniza dados a cada 10 segundos
+@st.cache_data(ttl=10)  # Sincroniza e atualiza os dados a cada 10 segundos
 def carregar_dados(nome_aba):
     url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
     try:
         df = pd.read_csv(url)
-        # Remove colunas ou linhas fantasmas totalmente vazias
+        # Remove colunas ou linhas fantasmas totalmente vazias que o Google Sheets gera
         df = df.dropna(how='all', axis=1)
         df = df.dropna(how='all', axis=0)
         return df
@@ -36,7 +37,7 @@ def carregar_dados(nome_aba):
         st.error(f"Erro ao ler a aba '{nome_aba}': {e}")
         return pd.DataFrame()
 
-# Chamada das abas com os nomes IDÊNTICOS aos do seu Google Sheets
+# Chamada das abas com os nomes idênticos aos do teu Google Sheets
 df_alunos = carregar_dados("alunos")
 df_financeiro = carregar_dados("financeiro")
 df_espera = carregar_dados("espera")
@@ -59,7 +60,7 @@ if not df_alunos.empty:
 if not df_espera.empty:
     st.sidebar.metric("Fila de Espera", len(df_espera))
 
-# 4. CORPO PRINCIPAL - RETORNO DE TODOS OS MENUS ORIGINAIS
+# 4. CORPO PRINCIPAL - TODAS AS 5 ABAS ORIGINAIS RESTAURADAS
 st.title("Sistema de Gestão Integrada")
 st.markdown("---")
 
@@ -82,10 +83,10 @@ with tab_agenda:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Filtro por Status (usa a coluna 'Status' da sua planilha se ela existir)
+            # Filtro por Status (utiliza a coluna 'Status' se ela existir)
             filtro_status = st.selectbox("Filtrar por Status", ["Todos"] + (list(df_alunos['Status'].unique()) if 'Status' in colunas else []))
         with col2:
-            # Filtro por Horário (usa a coluna 'Horario' da sua planilha se ela existir)
+            # Filtro por Horário (utiliza a coluna 'Horario' se ela existir)
             filtro_horario = st.selectbox("Filtrar por Horário", ["Todos"] + (list(df_alunos['Horario'].unique()) if 'Horario' in colunas else []))
         
         df_filtrado = df_alunos.copy()
