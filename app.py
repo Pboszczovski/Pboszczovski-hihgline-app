@@ -14,41 +14,46 @@ data_atual = datetime.now().strftime("%d/%m/%Y")
 hora_atual = datetime.now().strftime("%H:%M")
 st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_atual}")
 
-# ID da sua planilha extraído da URL do seu navegador
+# ID Corrigido da sua Planilha "Banco Highline"
 PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
 
-# Função otimizada para carregar os dados via query string estruturada (gviz)
-@st.cache_data(ttl=60, show_spinner="Sincronizando banco de dados...")
-def carregar_dados_seguros():
-    # Estruturação de links via Google Visualization API com GIDs específicos para evitar 404
-    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=0"
-    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=1020408012"
-    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=1228435040"
+# Função para carregar os dados via API de Visualização do Google
+@st.cache_data(ttl=30, show_spinner="Sincronizando banco de dados com a nuvem...")
+def carregar_dados_sheets():
+    # Usando o endpoint /gviz/tq que é o mais estável do Google para aplicativos web
+    base_url = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv"
     
-    # Leitura individual das planilhas
-    df_a = pd.read_csv(url_alunos)
-    df_f = pd.read_csv(url_financeiro)
-    df_e = pd.read_csv(url_espera)
+    url_alunos = f"{base_url}&gid=0"
+    url_financeiro = f"{base_url}&gid=1020408012"
+    url_espera = f"{base_url}&gid=1228435040"
+    
+    # Leitura individual forçando tratamento de strings para evitar quebras por formatação antiga
+    df_a = pd.read_csv(url_alunos, keep_default_na=False)
+    df_f = pd.read_csv(url_financeiro, keep_default_na=False)
+    df_e = pd.read_csv(url_espera, keep_default_na=False)
+    
     return df_a, df_f, df_e
 
 try:
-    df_alunos, df_financeiro, df_espera = carregar_dados_seguros()
+    df_alunos, df_financeiro, df_espera = carregar_dados_sheets()
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
-    st.sidebar.error("❌ Erro na sincronização dos dados.")
+    st.sidebar.error("❌ Erro na sincronização.")
     st.error(
-        f"Erro ao acessar as tabelas do Google Sheets. \n\n"
-        f"IMPORTANTE: Acesse a planilha no Google Drive, clique em 'Compartilhar' e "
-        f"certifique-se de que o acesso geral está configurado para 'Qualquer pessoa com o link pode ler'.\n\n"
-        f"Detalhes técnicos: {e}"
+        f"Não foi possível ler as abas da planilha. \n\n"
+        f"Se o erro persistir, abra sua planilha no navegador e copie novamente o código longo "
+        f"que fica entre '/d/' e '/edit' na barra de endereços para atualizar o PLANILHA_ID.\n\n"
+        f"Detalhes: {e}"
     )
     st.stop()
 
-# Inicialização de métricas seguras baseadas nos dados retornados
-if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
-    total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"])
-else:
-    total_matriculados = len(df_alunos) if df_alunos is not None else 0
+# Cálculos de Métricas Seguras
+total_matriculados = 0
+if df_alunos is not None and not df_alunos.empty:
+    if "Status" in df_alunos.columns:
+        total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"])
+    else:
+        total_matriculados = len(df_alunos)
 
 total_espera = len(df_espera) if df_espera is not None else 0
 
@@ -74,20 +79,18 @@ tab_agenda, tab_alunos, tab_financeiro, tab_espera, tab_novos = st.tabs([
 # ==========================================
 with tab_agenda:
     st.subheader("📅 Agendamentos e Horários")
-    st.markdown("Abaixo estão listados os treinos e agendamentos para o período:")
     
-    if df_alunos is not None and not df_alunos.empty and "Horario" in df_alunos.columns:
-        if "Status" in df_alunos.columns:
-            df_hoje = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        else:
-            df_hoje = df_alunos
-        
-        if not df_hoje.empty:
+    if df_alunos is not None and not df_alunos.empty:
+        df_hoje = df_alunos
+        if "Status" in df_hoje.columns:
+            df_hoje = df_hoje[df_hoje["Status"].astype(str).str.upper() == "ATIVO"]
+            
+        if "Horario" in df_hoje.columns and not df_hoje.empty:
             df_hoje = df_hoje.sort_values(by="Horario")
             colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_hoje.columns]
             st.dataframe(df_hoje[colunas_agenda], use_container_width=True, hide_index=True)
         else:
-            st.info("Nenhum registro de treino ativo localizado para hoje.")
+            st.info("Nenhum registro com horário definido para exibição.")
     else:
         st.info("Insira dados na planilha para visualizar a agenda de treinos.")
 
@@ -97,34 +100,17 @@ with tab_agenda:
 with tab_alunos:
     st.subheader("👥 Controle de Alunos")
     
-    if df_alunos is not None and "Status" in df_alunos.columns:
-        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-    else:
-        df_ativos = df_alunos if df_alunos is not None else pd.DataFrame()
-
-    st.metric(label="Total de Alunos Matriculados", value=len(df_ativos))
-    
-    busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome do aluno...", key="busca_aluno_nome")
-    
-    if busca_nome and not df_ativos.empty and "Nome" in df_ativos.columns:
-        df_filtrado = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca_nome, case=False, na=False)]
-    else:
-        df_filtrado = df_ativos
-
-    st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
-    
-    st.markdown("### ⚙️ Ações de Gerenciamento")
-    if not df_ativos.empty and "Nome" in df_ativos.columns:
-        aluno_para_desativar = st.selectbox(
-            "Selecione o aluno para desativar:", 
-            df_ativos["Nome"].tolist(), 
-            key="selectbox_desativar"
-        )
+    if df_alunos is not None and not df_alunos.empty:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos
+        st.metric(label="Total de Alunos Matriculados", value=len(df_ativos))
         
-        if st.button("Confirmar Desativação", type="secondary"):
-            st.warning(f"Ação de desativação registrada para: {aluno_para_desativar}.")
+        busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome...", key="busca_at")
+        if busca_nome and "Nome" in df_ativos.columns:
+            df_ativos = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca_nome, case=False, na=False)]
+            
+        st.dataframe(df_ativos, use_container_width=True, hide_index=True)
     else:
-        st.write("Nenhum aluno ativo disponível para ações.")
+        st.info("Nenhum aluno cadastrado.")
 
 # ==========================================
 # 3. ABA: RELATÓRIO FINANCEIRO
@@ -138,8 +124,6 @@ with tab_financeiro:
             faturamento_total = valores.sum()
             valor_formatado = f"R$ {faturamento_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.metric(label="Faturamento Estimado", value=valor_formatado)
-        else:
-            st.info("Coluna 'Valor' não encontrada na aba financeiro.")
         
         st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
     else:
@@ -157,11 +141,10 @@ with tab_espera:
         st.info("Nenhum aluno na fila de espera no momento.")
 
 # ==========================================
-# 5. ABA: NOVOS CADASTROS (GERADOR DE CARGA)
+# 5. ABA: NOVOS CADASTROS
 # ==========================================
 with tab_novos:
     st.subheader("➕ Gerador de Carga para Novos Alunos")
-    st.markdown("Preencha o formulário abaixo para validar e gerar a linha perfeitamente formatada para o Google Sheets.")
     
     with st.form("form_novo_aluno", clear_on_submit=True):
         nome_completo = st.text_input("Nome Completo:")
@@ -183,19 +166,12 @@ with tab_novos:
         
         if botao_validar:
             if nome_completo and whatsapp:
-                st.success(f"🎉 Dados validados com sucesso para **{nome_completo}**!")
-                
+                st.success(f"🎉 Dados validados para **{nome_completo}**!")
                 nova_linha = {
-                    "Nome": nome_completo,
-                    "Telefone": whatsapp,
-                    "Bairro": bairro,
-                    "Plano": modalidade,
-                    "Valor": preco_mensal,
-                    "Vencimento": dia_vencimento,
-                    "Dias": dias_aula,
-                    "Horario": horario_escolhido,
-                    "Status": "Ativo"
+                    "Nome": nome_completo, "Telefone": whatsapp, "Bairro": bairro,
+                    "Plano": modalidade, "Valor": preco_mensal, "Vencimento": dia_vencimento,
+                    "Dias": dias_aula, "Horario": horario_escolhido, "Status": "Ativo"
                 }
                 st.json(nova_linha)
             else:
-                st.error("⚠️ Por favor, preencha os campos obrigatórios (Nome Completo e WhatsApp).")
+                st.error("⚠️ Preencha os campos obrigatórios (Nome e WhatsApp).")
