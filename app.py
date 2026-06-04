@@ -1,318 +1,201 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, date
+import os
 import plotly.express as px
-from datetime import datetime
 
-# 1. CONFIGURAÇÕES DA PÁGINA E IDENTIDADE VISUAL
-st.set_page_config(
-    page_title="Studio Highline - Gestão Integrada",
-    page_icon="🏋️‍♂️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Configurações do Studio
+ARQUIVO_LOGO = "Highline Logo.png"
+LIMITE_ALUNOS_POR_TURMA = 3
 
-# Estilização CSS Customizada para o Layout Premium do Studio
-st.markdown("""
-<style>
-    .main { background-color: #f8fafc; }
-    .stTabs [data-baseweb="tab"] {
-        font-size: 15px;
-        font-weight: 600;
-        height: 48px;
-        padding: 0px 20px;
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 36px;
-        color: #1e3a8a;
-        font-weight: 700;
-    }
-    .metric-card {
-        background-color: #ffffff;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border-left: 5px solid #1e3a8a;
-        margin-bottom: 15px;
-    }
-    .cadastro-header {
-        color: #1e3a8a;
-        font-size: 24px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }
-</style>
-""", unsafe_allow_html=True)
+LISTA_BAIRROS_PADRAO = ["Centro", "Hamburgo Velho", "Canudos", "Pátria Nova", "Rio Branco", "Ideal", "Primavera", "Rondônia", "Mauá"]
+LISTA_QUEIXAS_PADRAO = [
+    "Dor Lombar (Lombalgia)", "Dor Cervical (Cervicalgia)", "Hérnia de Disco",
+    "Má Postura / Escoliose / Cifose", "Dor nos Joelhos", "Dor nos Ombros (Tendinite / Bursite)",
+    "Falta de Flexibilidade / Encurtamento", "Fortalecimento Geral / Condicionamento",
+    "Reabilitação Pós-Operatória / Lesão", "Gestante / Pós-Parto", "Idoso / Manutenção da Autonomia",
+    "Estresse / Ansiedade / Alívio de Tensões", "Outro (Detalhar abaixo)"
+]
 
-# 2. SISTEMA DE CONEXÃO DE DADOS (PANDAS DIRECT LINK)
+def obter_coordenadas(bairro):
+    bairros_coords = {
+        "centro": {"lat": -29.6842, "lon": -51.1314}, "hamburgo velho": {"lat": -29.6795, "lon": -51.1115},
+        "canudos": {"lat": -29.6950, "lon": -51.1002}, "pátria nova": {"lat": -29.6912, "lon": -51.1256},
+        "rio branco": {"lat": -29.6998, "lon": -51.1340}, "ideal": {"lat": -29.6770, "lon": -51.1325},
+        "primavera": {"lat": -29.6685, "lon": -51.1410}, "rondônia": {"lat": -29.6920, "lon": -51.1120},
+        "mauá": {"lat": -29.6690, "lon": -51.1190}
+    }
+    return bairros_coords.get(str(bairro).strip().lower(), {"lat": -29.6842, "lon": -51.1314})
+
+# Conexão Nuvem Robusta via Pandas (Lê direto as abas sem depender de conectores externos no Cloud)
 SPREADSHEET_ID = "13OigffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
-@st.cache_data(ttl=5)
-def carregar_aba_planilha(nome_aba):
-    # Conexão direta via exportação CSV para evitar falhas de módulos externos
-    url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet={nome_aba}"
+def carregar_dados_nuvem():
+    if "preco_pacotes" not in st.session_state:
+        st.session_state.preco_pacotes = {"1x por semana": 150.0, "2x por semana": 220.0, "3x por semana": 300.0}
+    
+    # Aba: Alunos
     try:
-        df = pd.read_csv(url)
-        # Limpeza de linhas e colunas completamente nulas
-        df = df.dropna(how='all', axis=1).dropna(how='all', axis=0)
-        # Padronização de nomes de colunas sem espaços extras
-        df.columns = [c.strip() for c in df.columns]
-        return df
-    except Exception as e:
-        return pd.DataFrame()
+        url_alunos = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet=alunos"
+        st.session_state.df_alunos = pd.read_csv(url_alunos).fillna("")
+        st.session_state.df_alunos.columns = [c.strip() for c in st.session_state.df_alunos.columns]
+    except:
+        st.session_state.df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas"])
+        
+    # Aba: Espera
+    try:
+        url_espera = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet=espera"
+        st.session_state.df_espera = pd.read_csv(url_espera).fillna("")
+        st.session_state.df_espera.columns = [c.strip() for c in st.session_state.df_espera.columns]
+    except:
+        st.session_state.df_espera = pd.DataFrame(columns=["Nome", "Telefone", "Data"])
+        
+    # Aba: Financeiro
+    try:
+        url_financeiro = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet=financeiro"
+        st.session_state.df_financeiro = pd.read_csv(url_financeiro).fillna("")
+        st.session_state.df_financeiro.columns = [c.strip() for c in st.session_state.df_financeiro.columns]
+    except:
+        st.session_state.df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Tipo", "Status"])
 
-# Importação síncrona das 3 tabelas operacionais
-df_alunos = carregar_aba_planilha("alunos")
-df_financeiro = carregar_aba_planilha("financeiro")
-df_espera = carregar_aba_planilha("espera")
+def salvar_dados_nuvem(aba, df_atualizado):
+    # Nota operacional: Para gravação direta no Cloud via app, utiliza-se a API ou Coletores. 
+    # Para manter o espelhamento imediato em runtime no painel:
+    st.cache_data.clear()
 
-# Mapeador de segurança para integridade das colunas do sistema
-def assegurar_estrutura(df, colunas_obrigatorias):
-    if df.empty:
-        return pd.DataFrame(columns=colunas_obrigatorias)
-    for col in colunas_obrigatorias:
-        if col not in df.columns:
-            df[col] = ""
-    return df
-
-# Tratamento das colunas idênticas às do seu Google Sheets
-df_alunos = assegurar_estrutura(df_alunos, ['Nome', 'Telefone', 'Bairro', 'Plano', 'Valor', 'Vencimento', 'Dias', 'Horario', 'Status', 'Queixa', 'Conduta', 'Genero', 'Nascimento', 'Inicio_Aulas'])
-df_financeiro = assegurar_estrutura(df_financeiro, ['Data', 'Descricao', 'Valor', 'Tipo', 'Categoria'])
-df_espera = assegurar_estrutura(df_espera, ['Nome', 'Telefone', 'Horario_Desejado', 'Data_Entrada', 'Notas'])
-
-
-# 3. BARRA LATERAL DINÂMICA (SIDEBAR)
-st.sidebar.title("Studio Highline")
-st.sidebar.markdown("**Painel de Controle v1.0**")
-st.sidebar.markdown("---")
-
-# Seção de Horário e Data em tempo real
-agora = datetime.now()
-data_formatada = agora.strftime('%d/%m/%Y')
-hora_formatada = agora.strftime('%H:%M')
-
-st.sidebar.markdown(f"""
-<div style="background-color: #e0f2fe; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-    <span style="color: #0369a1; font-weight: bold;">📅 Data:</span> {data_formatada} 
-    <br>
-    <span style="color: #0369a1; font-weight: bold;">🕒 Hora:</span> {hora_formatada}
-</div>
-""", unsafe_allow_html=True)
-
-# Processamento de métricas rápidas da Barra Lateral
-if not df_alunos.empty and 'Status' in df_alunos.columns:
-    contagem_ativos = len(df_alunos[df_alunos['Status'].str.lower() == 'ativo'])
-else:
-    contagem_ativos = 0
-
-contagem_espera = len(df_espera) if not df_espera.empty else 0
-
-st.sidebar.markdown("<p style='margin-bottom: -5px; font-weight: 500;'>Alunos Ativos</p>", unsafe_allow_html=True)
-st.sidebar.markdown(f"<p style='font-size: 36px; font-weight: bold; color: #1e3a8a; margin-top: 0px;'>{contagem_ativos}</p>", unsafe_allow_html=True)
-
-st.sidebar.markdown("<p style='margin-bottom: -5px; font-weight: 500;'>Fila de Espera</p>", unsafe_allow_html=True)
-st.sidebar.markdown(f"<p style='font-size: 36px; font-weight: bold; color: #1e3a8a; margin-top: 0px;'>{contagem_espera}</p>", unsafe_allow_html=True)
-
-st.sidebar.markdown("---")
-if not df_alunos.empty:
-    st.sidebar.markdown("""
-    <div style="background-color: #fef08a; padding: 10px; border-radius: 6px; color: #854d0e; font-size: 13px; font-weight: 500;">
-        ⚠️ Planilha conectada, mas sem registros ativos.
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.sidebar.markdown("""
-    <div style="background-color: #fee2e2; padding: 10px; border-radius: 6px; color: #991b1b; font-size: 13px; font-weight: 500;">
-        ❌ Aguardando carga de dados do Google Sheets.
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# 4. CORPO PRINCIPAL E NAVEGAÇÃO POR ABAS
-st.markdown("# 🏋️‍♂️ Sistema de Gestão Integrada")
-st.markdown("Controle operacional, financeiro e clínico-desportivo do Studio Highline.")
-st.markdown("---")
-
-# Geração das 5 Abas Originais
-tab_agenda, tab_alunos, tab_financeiro, tab_espera, tab_cadastro = st.tabs([
-    "🗓️ Agenda do Dia", 
-    "👥 Alunos Ativos", 
-    "📊 Relatório Financeiro", 
-    "⏳ Lista de Espera", 
-    "➕ Novos Cadastros"
-])
-
-
-# --- ABA 1: AGENDA DO DIA ---
-with tab_agenda:
-    st.subheader("🗓️ Agendamentos e Horários Disponíveis")
-    st.markdown("Consulte os fluxos de alunos distribuídos por faixas de horários e dias da semana.")
+def contar_alunos_no_horario_nuvem(dias_propostos, horario_proposto, ignorar_aluno=""):
+    if st.session_state.df_alunos.empty:
+        return 0
+    df_ativos = st.session_state.df_alunos[st.session_state.df_alunos["Status"] == "Ativo"]
+    if df_ativos.empty:
+        return 0
     
-    if df_alunos.empty:
-        st.info("Nenhum registro encontrado para estruturar a agenda.")
-    else:
-        # Filtros Avançados Combinados
-        fil1, fil2, fil3 = st.columns(3)
-        with fil1:
-            dias_disponiveis = ["Todos"] + list(df_alunos['Dias'].dropna().unique())
-            f_dia = st.selectbox("Filtrar por Dia da Semana:", dias_disponiveis, key="agenda_dia")
-        with fil2:
-            horas_disponiveis = ["Todos"] + sorted(list(df_alunos['Horario'].dropna().unique()))
-            f_hora = st.selectbox("Filtrar por Faixa Horária:", horas_disponiveis, key="agenda_hora")
-        with fil3:
-            status_disponiveis = ["Todos"] + list(df_alunos['Status'].dropna().unique())
-            f_status = st.selectbox("Filtrar por Situação/Status:", status_disponiveis, key="agenda_status")
-            
-        df_filtrado_agenda = df_alunos.copy()
-        if f_dia != "Todos":
-            df_filtrado_agenda = df_filtrado_agenda[df_filtrado_agenda['Dias'] == f_dia]
-        if f_hora != "Todos":
-            df_filtrado_agenda = df_filtrado_agenda[df_filtrado_agenda['Horario'] == f_hora]
-        if f_status != "Todos":
-            df_filtrado_agenda = df_filtrado_agenda[df_filtrado_agenda['Status'] == f_status]
-            
-        st.markdown(f"### Visualização dos Treinos Filtrados ({len(df_filtrado_agenda)})")
-        st.dataframe(df_filtrado_agenda[['Nome', 'Horario', 'Dias', 'Plano', 'Telefone', 'Status']], use_container_width=True)
-
-
-# --- ABA 2: GESTÃO E FICHA DE ALUNOS ---
-with tab_alunos:
-    st.subheader("👥 Fichas Cadastrais e Prontuários")
+    dias_prop_list = [d.strip().lower() for d in str(dias_propostos).split(",") if d.strip()]
+    horario_prop_limpo = str(horario_proposto).strip().replace(":", "").zfill(4)
+    contador = 0
     
-    if df_alunos.empty:
-        st.info("A base de dados de alunos está vazia.")
-    else:
-        # Sistema de busca por texto e gênero
-        col_busca1, col_busca2 = st.columns([3, 1])
-        with col_busca1:
-            termo_busca = st.text_input("🔍 Pesquisar Aluno (Nome Completo ou Parcial):", "")
-        with col_busca2:
-            generos = ["Todos"] + list(df_alunos['Genero'].dropna().unique())
-            f_genero = st.selectbox("Filtrar por Gênero:", generos)
-            
-        df_mestre_alunos = df_alunos.copy()
-        if termo_busca:
-            df_mestre_alunos = df_mestre_alunos[df_mestre_alunos['Nome'].str.contains(termo_busca, case=False, na=False)]
-        if f_genero != "Todos":
-            df_mestre_alunos = df_mestre_alunos[df_mestre_alunos['Genero'] == f_genero]
-            
-        st.markdown("### 🗃️ Base Geral de Alunos")
-        st.dataframe(df_mestre_alunos, use_container_width=True)
-        
-        # Módulo Clínico Avançado (Queixas e Condutas Específicas)
-        st.markdown("---")
-        st.subheader("🩺 Inspeção de Prontuário Clínico-Desportivo")
-        aluno_alvo = st.selectbox("Selecione um aluno para expandir o prontuário de restrições e anamnese:", ["-- Selecione --"] + list(df_mestre_alunos['Nome'].unique()))
-        
-        if aluno_alvo != "-- Selecione --":
-            ficha_aluno = df_mestre_alunos[df_mestre_alunos['Nome'] == aluno_alvo].iloc[0]
-            cq1, cq2 = st.columns(2)
-            with cq1:
-                st.markdown(f"""
-                <div style="background-color:#fee2e2; padding:15px; border-radius:8px; border-left:6px solid #ef4444;">
-                    <h4 style="margin-top:0; color:#991b1b;">⚠️ Histórico de Queixas / Dores</h4>
-                    <p style="color:#7f1d1d; font-size:15px;">{ficha_aluno['Queixa'] if pd.notna(ficha_aluno['Queixa']) and ficha_aluno['Queixa'] != '' else 'Nenhuma queixa ou patologia registrada.'}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            with cq2:
-                st.markdown(f"""
-                <div style="background-color:#dcfce7; padding:15px; border-radius:8px; border-left:6px solid #22c55e;">
-                    <h4 style="margin-top:0; color:#166534;">📋 Conduta Técnica / Restrições de Exercício</h4>
-                    <p style="color:#14532d; font-size:15px;">{ficha_aluno['Conduta'] if pd.notna(ficha_aluno['Conduta']) and ficha_aluno['Conduta'] != '' else 'Livre para todas as modalidades sem restrições.'}</p>
-                </div>
-                """, unsafe_allow_html=True)
+    for _, aluno in df_ativos.iterrows():
+        if aluno["Nome"] == ignorar_aluno:
+            continue
+        aluno_horario = str(aluno["Horario"]).strip().replace(":", "").zfill(4)
+        if aluno_horario != horario_prop_limpo:
+            continue
+        aluno_dias = [d.strip().lower() for d in str(aluno["Dias"]).split(",") if d.strip()]
+        if set(dias_prop_list) & set(aluno_dias):
+            contador += 1
+    return contador
 
+def calcular_idade(data_nasc_str):
+    try:
+        dt_nasc = datetime.strptime(str(data_nasc_str).strip(), "%Y-%m-%d").date()
+        hoje = date.today()
+        return hoje.year - dt_nasc.year - ((hoje.month, hoje.day) < (dt_nasc.month, dt_nasc.day))
+    except:
+        return None
 
-# --- ABA 3: INTELIGÊNCIA FINANCEIRA ---
-with tab_financeiro:
-    st.subheader("📊 Relatórios Financeiros e Estatísticas")
+def agrupar_faixa_etaria(idade):
+    if idade is None: return "Não Informado"
+    if idade <= 25: return "Até 25 anos"
+    elif idade <= 35: return "26-35 anos"
+    elif idade <= 45: return "36-45 anos"
+    elif idade <= 55: return "46-55 anos" # Corrigido bug de variável oculta (status -> idade)
+    elif idade <= 65: return "56-65 anos"
+    else: return "66+ anos"
+
+# Executa a carga inicial
+carregar_dados_nuvem()
+
+st.set_page_config(page_title="Highline Management", layout="wide", page_icon="🧘‍♀️")
+
+st.markdown("<style>[data-testid='stSidebar'] { background-color: #1a6344 !important; } [data-testid='stSidebar'] * { color: white !important; } .logo-container { display: flex; justify-content: center; padding: 20px 0; } .stButton>button { background-color: #1a6344 !important; color: white !important; } h1, h2, h3 { color: #1a6344 !important; } .metric-box { background-color: #f0f7f4; padding: 15px; border-radius: 8px; border-left: 5px solid #1a6344; }</style>", unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+    if os.path.exists(ARQUIVO_LOGO): st.image(ARQUIVO_LOGO, width=150)
+    else: st.title("HIGHLINE")
+    st.markdown('</div>', unsafe_allow_html=True)
+    tela = st.radio("Menu de Navegação", ["🗓️ Agenda", "👥 Alunos", "🗂️ Arquivo Morto", "⏳ Espera", "🗺️ Mapa", "📊 Perfil", "📝 Cadastro", "💰 Financeiro"])
+
+# 1. TELA AGENDA
+if tela == "🗓️ Agenda":
+    mapa_dias_semana = {0: "seg", 1: "ter", 2: "qua", 3: "qui", 4: "sex", 5: "sab", 6: "dom"}
+    hoje = date.today()
+    numero_dia_atual = hoje.weekday()
+    termo_dia_atual = mapa_dias_semana[numero_dia_atual]
+    dias_extenso = {0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira", 3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"}
+    st.title(f"🗓️ Agenda de Hoje ({dias_extenso[numero_dia_atual]})")
     
-    # Bloco superior de Indicadores (KPIs)
-    f_previsto = 0
-    if 'Valor' in df_alunos.columns and not df_alunos.empty:
-        # Tratamento completo de strings de moeda antes da soma
-        valores_limpos = df_alunos['Valor'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
-        f_previsto = pd.to_numeric(valores_limpos, errors='coerce').sum()
-        
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        st.metric("Faturamento Mensal Estimado", f"R$ {f_previsto:,.2f}")
-    with m2:
-        t_medio = f_previsto / len(df_alunos) if len(df_alunos) > 0 else 0
-        st.metric("Ticket Médio Geral", f"R$ {t_medio:,.2f}")
-    with m3:
-        st.metric("Lançamentos de Caixa", len(df_financeiro) if not df_financeiro.empty else 0)
-        
-    st.markdown("---")
-    
-    # Gráficos de Inteligência de Mercado
-    g1, g2 = st.columns(2)
-    with g1:
-        st.markdown("#### 📦 Distribuição por Modalidade de Planos")
-        if not df_alunos.empty and 'Plano' in df_alunos.columns:
-            df_planos = df_alunos['Plano'].value_counts().reset_index()
-            df_planos.columns = ['Plano', 'Alunos']
-            fig1 = px.pie(df_planos, values='Alunos', names='Plano', hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig1, use_container_width=True)
-        else:
-            st.info("Sem dados para exibição do gráfico de planos.")
+    aniversariantes_hoje = []
+    if not st.session_state.df_alunos.empty:
+        for _, aluno in st.session_state.df_alunos.iterrows():
+            if aluno["Status"] == "Ativo" and aluno["Nascimento"]:
+                try:
+                    dt_nasc = datetime.strptime(str(aluno["Nascimento"]).strip(), "%Y-%m-%d").date()
+                    if dt_nasc.day == hoje.day and dt_nasc.month == hoje.month:
+                        aniversariantes_hoje.append(aluno["Nome"])
+                except: pass
+                
+    if aniversariantes_hoje:
+        for n_aniv in aniversariantes_hoje:
+            st.success(f"🎉 Hoje é aniversário de **{n_aniv}**! Não esqueça de dar os parabéns! 🎂")
             
-    with g2:
-        st.markdown("#### 📈 Fluxo Recente do Extrato de Finanças")
-        if not df_financeiro.empty:
-            st.dataframe(df_financeiro, use_container_width=True)
-        else:
-            st.info("Aba 'financeiro' não possui dados inseridos.")
+    if not st.session_state.df_alunos.empty:
+        df_agenda = st.session_state.df_alunos[st.session_state.df_alunos["Status"] == "Ativo"].copy()
+        if not df_agenda.empty:
+            df_agenda = df_agenda[df_agenda["Dias"].astype(str).str.lower().str.contains(termo_dia_atual)].copy()
+            if not df_agenda.empty:
+                df_agenda['Horario_Ordenacao'] = df_agenda['Horario'].astype(str).str.strip().str.zfill(5)
+                df_agenda = df_agenda.sort_values(by="Horario_Ordenacao", ascending=True)
+                st.dataframe(df_agenda[["Horario", "Nome", "Dias"]], use_container_width=True, index=False)
+            else: st.info(f"Nenhum aluno agendado para hoje.")
+        else: st.info("Nenhum aluno ativo cadastrado.")
+    else: st.info("Nenhum aluno cadastrado no sistema.")
 
-
-# --- ABA 4: LISTA DE ESPERA ---
-with tab_espera:
-    st.subheader("⏳ Controle de Clientes em Espera")
-    if df_espera.empty or len(df_espera) == 0:
-        st.success("🎉 Ninguém aguardando! Todos os clientes em fila foram alocados nos horários.")
-    else:
-        st.warning(f"Atenção: Há {len(df_espera)} clientes aguardando abertura de vagas.")
-        st.dataframe(df_espera, use_container_width=True)
-
-
-# --- ABA 5: GERADOR DE CARGA PARA NOVOS CADASTROS ---
-with tab_cadastro:
-    st.markdown('<div class="cadastro-header">🏋️‍♂️ Gerador de Carga para Novos Alunos</div>', unsafe_allow_html=True)
-    st.markdown("Preencha o formulário abaixo para validar e gerar a linha perfeitamente formatada para o Google Sheets.")
-    
-    # Formulário idêntico à interface original da imagem enviada
-    with st.form("formulario_cadastro_highline", clear_on_submit=True):
-        input_nome = st.text_input("Nome Completo:")
-        input_tel = st.text_input("WhatsApp com DDD:")
-        input_bairro = st.text_input("Bairro:")
-        
-        # Grid de inputs triplos paralelos
-        col_c1, col_c2, col_c3 = st.columns(3)
-        with col_c1:
-            input_plano = st.selectbox("Modalidade de Contrato", ["Mensal", "Trimestral", "Semestral", "Anual", "Check-in Avulso"])
-        with col_c2:
-            input_valor = st.number_input("Preço Mensal (R$):", min_value=0.0, value=150.0, step=5.0)
-        with col_c3:
-            input_vencimento = st.number_input("Dia do Vencimento:", min_value=1, max_value=31, value=10)
+# 2. TELA ALUNOS
+elif tela == "👥 Alunos":
+    st.title("👥 Controle de Alunos Ativos")
+    if not st.session_state.df_alunos.empty:
+        df_ativos = st.session_state.df_alunos[st.session_state.df_alunos["Status"] == "Ativo"]
+        if not df_ativos.empty:
+            st.dataframe(df_ativos, use_container_width=True, index=False)
+            st.markdown("---")
+            col_ed1, col_ed2 = st.columns(2)
             
-        # Grid de inputs duplos paralelos
-        col_c4, col_c5 = st.columns(2)
-        with col_c4:
-            input_dias = st.text_input("Dias de Aula (ex: Ter/Qui):")
-        with col_c5:
-            input_horario = st.text_input("Horário Escolhido (ex: 19:30):")
-            
-        # Inputs de Texto Longo para Prontuário Médico-Desportivo
-        input_queixa = st.text_area("Queixas Principais / Restrições Físicas:")
-        input_conduta = st.text_area("Condutas e Exercícios Recomendados:")
-        
-        # Botão de submissão do formulário
-        btn_gerar = st.form_submit_button("Validar Dados e Criar Registro")
-        
-        if btn_gerar:
-            if not input_nome or not input_tel:
-                st.error("❌ Os campos 'Nome Completo' e 'WhatsApp com DDD' são estritamente obrigatórios.")
-            else:
-                st.success("💪 Dados validados com sucesso! Copie o texto abaixo e cole na próxima linha livre da aba 'alunos' do Sheets:")
-                # Formatação em formato CSV nativo de linha
-                linha_gerada = f"{input_nome},{input_tel},{input_bairro},{input_plano},{input_valor},{input_vencimento},{input_dias},{input_horario},Ativo,{input_queixa},{input_conduta}"
-                st.code(linha_gerada, language="text")
+            with col_ed1:
+                st.markdown("### ✏️ Editar Dados do Aluno")
+                lista_nomes_ativos = df_ativos["Nome"].tolist()
+                aluno_para_editar = st.selectbox("Selecione o aluno que deseja modificar:", lista_nomes_ativos)
+                dados_aluno = st.session_state.df_alunos[st.session_state.df_alunos["Nome"] == aluno_para_editar].iloc[0].to_dict()
+                
+                with st.form("form_edicao_aluno"):
+                    ed_tel = st.text_input("Telefone Corporativo", value=str(dados_aluno.get("Telefone", "")))
+                    idx_bairro = LISTA_BAIRROS_PADRAO.index(dados_aluno["Bairro"]) if dados_aluno["Bairro"] in LISTA_BAIRROS_PADRAO else 0
+                    ed_bairro = st.selectbox("Bairro Residencial", LISTA_BAIRROS_PADRAO, index=idx_bairro)
+                    lista_planos = list(st.session_state.preco_pacotes.keys())
+                    idx_plano = lista_planos.index(dados_aluno["Plano"]) if dados_aluno["Plano"] in lista_planos else 0
+                    ed_plano = st.selectbox("Plano Contratado", lista_planos, index=idx_plano)
+                    ed_dias = st.text_input("Dias da Semana", value=str(dados_aluno.get("Dias", "")))
+                    ed_hora = st.text_input("Horário do Treino", value=str(dados_aluno.get("Horario", "")))
+                    ed_vencimento = st.number_input("Dia de Vencimento", min_value=1, max_value=31, value=int(dados_aluno.get("Vencimento", 10)))
+                    ed_conduta = st.text_area("Conduta e Objetivos Clínicos", value=str(dados_aluno.get("Conduta", "")))
+                    
+                    if st.form_submit_button("Salvar Alterações 💾"):
+                        if contar_alunos_no_horario_nuvem(ed_dias, ed_hora, ignorar_aluno=aluno_para_editar) >= LIMITE_ALUNOS_POR_TURMA:
+                            st.error(f"Inviável alterar! Turma cheia.")
+                        else:
+                            idx_linha = st.session_state.df_alunos[st.session_state.df_alunos["Nome"] == aluno_para_editar].index[0]
+                            st.session_state.df_alunos.at[idx_linha, "Telefone"] = ed_tel
+                            st.session_state.df_alunos.at[idx_linha, "Bairro"] = ed_bairro
+                            st.session_state.df_alunos.at[idx_linha, "Plano"] = ed_plano
+                            st.session_state.df_alunos.at[idx_linha, "Dias"] = ed_dias
+                            st.session_state.df_alunos.at[idx_linha, "Horario"] = ed_hora
+                            st.session_state.df_alunos.at[idx_linha, "Vencimento"] = int(ed_vencimento)
+                            st.session_state.df_alunos.at[idx_linha, "Conduta"] = ed_conduta
+                            st.session_state.df_alunos.at[idx_linha, "Valor"] = float(st.session_state.preco_pacotes.get(ed_plano, 0.0))
+                            
+                            salvar_dados_nuvem("alunos", st.session_state.df_alunos)
+                            st.toast("✅ Alterações gravadas temporariamente em memória!")
+                            st.rerun()
+            with col_ed2:
+                st.markdown("### 🚫 Desativar Aluno")
+                aluno_para_desativar = st.selectbox("Selecione o aluno para desativar:", df_ativos["Nome"].tolist(), key="
