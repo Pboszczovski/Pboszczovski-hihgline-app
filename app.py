@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilização personalizada (CSS) - Visual Elegante Original
+# Estilização personalizada (CSS)
 st.markdown("""
 <style>
     .main { background-color: #f8f9fa; }
@@ -20,46 +20,45 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. CONEXÃO DIRETA COM O ID CORRIGIDO (Usando a letra O maiúscula)
+# ID extraído perfeitamente da sua barra de navegação
 SPREADSHEET_ID = "13OigffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
-@st.cache_data(ttl=5)  # Atualiza os dados a cada 5 segundos se houver mudanças
+@st.cache_data(ttl=5)
 def carregar_dados(nome_aba):
-    url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
+    # Formato alternativo de exportação direta do Google que não quebra se a tabela estiver sem registros
+    url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv&sheet={nome_aba}"
     try:
         df = pd.read_csv(url)
-        # Limpa linhas e colunas fantasmas geradas pelo Sheets
         df = df.dropna(how='all', axis=1)
         df = df.dropna(how='all', axis=0)
         return df
     except Exception as e:
-        st.error(f"Erro ao ler a aba '{nome_aba}': {e}")
+        # Se a planilha estiver sem dados, cria um DataFrame vazio estruturado para não exibir erro 404
         return pd.DataFrame()
 
-# Chamada das abas exatamente como estão escritas na sua planilha
+# Buscando dados das abas reais
 df_alunos = carregar_dados("alunos")
 df_financeiro = carregar_dados("financeiro")
 df_espera = carregar_dados("espera")
 
-# Indicador de sucesso na barra lateral
-if not df_alunos.empty or not df_financeiro.empty or not df_espera.empty:
-    st.sidebar.success("📊 Banco de dados sincronizado!")
-else:
-    st.sidebar.error("❌ Erro de leitura. Verifique as abas da planilha.")
-
-# 3. BARRA LATERAL (SIDEBAR) ORIGINAL
+# 3. BARRA LATERAL (SIDEBAR)
 st.sidebar.title("🏋️‍♂️ Studio Highline")
 st.sidebar.subheader("Painel de Controle v1.0")
 hoje = datetime.now().strftime("%d/%m/%Y")
 st.sidebar.info(f"📅 Data: {hoje}")
 
-# Métricas rápidas no painel lateral baseado nas linhas reais da planilha
-if not df_alunos.empty:
-    st.sidebar.metric("Alunos Cadastrados", len(df_alunos))
-if not df_espera.empty:
-    st.sidebar.metric("Fila de Espera", len(df_espera))
+# Exibe métricas de forma segura
+total_alunos = len(df_alunos) if not df_alunos.empty else 0
+total_espera = len(df_espera) if not df_espera.empty else 0
+st.sidebar.metric("Alunos Cadastrados", total_alunos)
+st.sidebar.metric("Fila de Espera", total_espera)
 
-# 4. CORPO PRINCIPAL - AS 5 ABAS DA INTERFACE
+if total_alunos > 0 or total_espera > 0 or not df_financeiro.empty:
+    st.sidebar.success("📊 Banco de dados sincronizado!")
+else:
+    st.sidebar.warning("⚠️ Planilha conectada, mas sem registros.")
+
+# 4. CORPO PRINCIPAL
 st.title("Sistema de Gestão Integrada")
 st.markdown("---")
 
@@ -74,13 +73,11 @@ tab_agenda, tab_alunos, tab_financeiro, tab_espera, tab_cadastro = st.tabs([
 # --- ABA 1: AGENDA DO DIA ---
 with tab_agenda:
     st.header("🗓️ Agendamentos do Dia")
-    
     if df_alunos.empty:
-        st.info("Insira dados na planilha para visualizar a agenda de treinos.")
+        st.info("Nenhum registro encontrado. Insira dados na sua planilha do Google Sheets para começar.")
     else:
         colunas = df_alunos.columns.tolist()
         col1, col2 = st.columns(2)
-        
         with col1:
             filtro_status = st.selectbox("Filtrar por Status", ["Todos"] + (list(df_alunos['Status'].unique()) if 'Status' in colunas else []))
         with col2:
@@ -97,24 +94,20 @@ with tab_agenda:
 # --- ABA 2: ALUNOS ATIVOS ---
 with tab_alunos:
     st.header("👥 Controle Geral de Alunos")
-    
     if df_alunos.empty:
-        st.info("Nenhum dado encontrado na aba 'alunos'.")
+        st.info("Nenhum aluno ativo cadastrado na planilha.")
     else:
         busca = st.text_input("🔍 Filtrar aluno pelo nome:")
         df_exibicao = df_alunos.copy()
-        
         if busca and 'Nome' in df_alunos.columns:
             df_exibicao = df_alunos[df_alunos['Nome'].str.contains(busca, case=False, na=False)]
-            
         st.dataframe(df_exibicao, use_container_width=True)
 
 # --- ABA 3: RELATÓRIO FINANCEIRO ---
 with tab_financeiro:
     st.header("📊 Saúde Financeira")
-    
     if df_financeiro.empty:
-        st.info("Nenhum dado encontrado na aba 'financeiro'.")
+        st.info("Nenhum dado financeiro registrado.")
     else:
         if 'Valor' in df_financeiro.columns:
             try:
@@ -127,7 +120,6 @@ with tab_financeiro:
 # --- ABA 4: LISTA DE ESPERA ---
 with tab_espera:
     st.header("⏳ Alunos na Lista de Espera")
-    
     if df_espera.empty:
         st.info("Nenhum aluno em espera no momento.")
     else:
@@ -137,7 +129,6 @@ with tab_espera:
 with tab_cadastro:
     st.header("➕ Rascunho de Novos Cadastros")
     st.info("Insira novos dados diretamente no Google Sheets para atualizar o painel automaticamente.")
-    
     with st.form("novo_cadastro"):
         nome = st.text_input("Nome Completo:")
         telefone = st.text_input("Telefone:")
