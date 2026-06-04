@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Configuração da página do Streamlit
+# Configuração da página do Streamlit (Deve ser a primeira linha de código Streamlit)
 st.set_page_config(page_title="Studio Highline - Gestão", layout="wide", page_icon="🏋️‍♂️")
 
 # Título Lateral (Sidebar)
@@ -14,32 +14,27 @@ data_atual = datetime.now().strftime("%d/%m/%Y")
 hora_atual = datetime.now().strftime("%H:%M")
 st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_atual}")
 
-# ID da sua planilha extraído diretamente da sua URL do navegador
+# ID da sua planilha extraído da URL do seu navegador
 PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
+URL_XLSX = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=xlsx"
 
-@st.cache_data(ttl=60)  # Atualiza os dados a cada 1 minuto se houver recarregamento
-def carregar_dados_seguros():
-    # Estrutura de link estável para leitura de múltiplas abas públicas via Pandas
-    url_base = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=xlsx"
-    
-    # O ExcelFile lê o arquivo inteiro e nos permite navegar pelas abas pelos nomes exatos
-    arquivo_excel = pd.ExcelFile(url_base)
-    
-    # Carregando cada aba pelo seu respectivo nome cadastrado no Google Sheets
-    df_a = arquivo_excel.parse("alunos")
-    df_f = arquivo_excel.parse("financeiro")
-    df_e = arquivo_excel.parse("espera")
-    
+# Função de carregamento com cache simplificado para evitar loops de memória
+@st.cache_data(ttl=120, show_spinner="Sincronizando com o Google Sheets...")
+def carregar_dados_seguros(url):
+    # Lendo diretamente as abas usando o motor openpyxl
+    df_a = pd.read_excel(url, sheet_name="alunos")
+    df_f = pd.read_excel(url, sheet_name="financeiro")
+    df_e = pd.read_excel(url, sheet_name="espera")
     return df_a, df_f, df_e
 
 try:
-    df_alunos, df_financeiro, df_espera = carregar_dados_seguros()
-    st.sidebar.success("✅ Banco de dados sincronizado com sucesso!")
+    df_alunos, df_financeiro, df_espera = carregar_dados_seguros(URL_XLSX)
+    st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
-    st.sidebar.error("❌ Erro na sincronização dos dados.")
+    st.sidebar.error("❌ Erro na sincronização.")
     st.error(
-        f"Erro ao acessar as abas. Verifique se os nomes das abas na sua planilha do Google Sheets "
-        f"são exatamente 'alunos', 'financeiro' e 'espera' (letras minúsculas). Detalhes técnicos: {e}"
+        f"Erro crítico ao ler o arquivo. Certifique-se de que os nomes das abas na sua "
+        f"planilha são exatamente 'alunos', 'financeiro' e 'espera'.\n\nDetalhes do erro: {e}"
     )
     st.stop()
 
