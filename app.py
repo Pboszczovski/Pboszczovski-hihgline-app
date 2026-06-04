@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Studio Highline - Gestão", layout="wide", page_icon="🏋️‍♂️")
@@ -15,19 +14,32 @@ data_atual = datetime.now().strftime("%d/%m/%Y")
 hora_atual = datetime.now().strftime("%H:%M")
 st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_atual}")
 
-# Conexão Robusta com o Google Sheets utilizando a biblioteca nativa
+# ID da sua planilha extraído diretamente da sua imagem
+PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
+
+@st.cache_data(ttl=60)  # Atualiza os dados a cada 1 minuto
+def carregar_dados_publicos():
+    # LINK ALUNOS: O gid é 0 como visto na imagem
+    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=0"
+    
+    # LINK FINANCEIRO: SUBSTITUA o '11111111' pelo número gid real da aba financeiro
+    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=11111111"
+    
+    # LINK ESPERA: SUBSTITUA o '22222222' pelo número gid real da aba espera
+    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=22222222"
+    
+    # Lendo os dados como CSV de forma direta, ignorando falhas de Service Account
+    df_a = pd.read_csv(url_alunos)
+    df_f = pd.read_csv(url_financeiro)
+    df_e = pd.read_csv(url_espera)
+    return df_a, df_f, df_e
+
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    
-    # Lendo as abas de forma independente puxando pelos nomes configurados
-    df_alunos = conn.read(worksheet="alunos")
-    df_financeiro = conn.read(worksheet="financeiro")
-    df_espera = conn.read(worksheet="espera")
-    
-    st.sidebar.success("✅ Banco de dados sincronizado!")
+    df_alunos, df_financeiro, df_espera = carregar_dados_publicos()
+    st.sidebar.success("✅ Banco de dados sincronizado publicamente!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
-    st.error(f"Não foi possível ler as tabelas. Detalhes técnicos: {e}")
+    st.error(f"Erro ao acessar as tabelas. Verifique se os números de 'gid' inseridos no código estão corretos. Detalhes: {e}")
     st.stop()
 
 # Título Principal do App
