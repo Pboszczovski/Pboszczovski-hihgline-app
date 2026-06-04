@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Configuração da página do Streamlit (Deve ser a primeira linha de código Streamlit)
+# Configuração da página do Streamlit (Deve ser estritamente a primeira linha de código)
 st.set_page_config(page_title="Studio Highline - Gestão", layout="wide", page_icon="🏋️‍♂️")
 
 # Título Lateral (Sidebar)
@@ -16,25 +16,29 @@ st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_at
 
 # ID da sua planilha extraído da URL do seu navegador
 PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
-URL_XLSX = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=xlsx"
 
-# Função de carregamento com cache simplificado para evitar loops de memória
-@st.cache_data(ttl=120, show_spinner="Sincronizando com o Google Sheets...")
-def carregar_dados_seguros(url):
-    # Lendo diretamente as abas usando o motor openpyxl
-    df_a = pd.read_excel(url, sheet_name="alunos")
-    df_f = pd.read_excel(url, sheet_name="financeiro")
-    df_e = pd.read_excel(url, sheet_name="espera")
+# Função leve para carregar dados públicos em formato CSV direto do Google
+@st.cache_data(ttl=60, show_spinner="Sincronizando banco de dados...")
+def carregar_dados_csv():
+    # Links públicos estruturados por nome de aba para exportação CSV limpa
+    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=alunos"
+    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=financeiro"
+    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=espera"
+    
+    # Leitura direta e veloz
+    df_a = pd.read_csv(url_alunos)
+    df_f = pd.read_csv(url_financeiro)
+    df_e = pd.read_csv(url_espera)
     return df_a, df_f, df_e
 
 try:
-    df_alunos, df_financeiro, df_espera = carregar_dados_seguros(URL_XLSX)
+    df_alunos, df_financeiro, df_espera = carregar_dados_csv()
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
-    st.sidebar.error("❌ Erro na sincronização.")
+    st.sidebar.error("❌ Erro na sincronização dos dados.")
     st.error(
-        f"Erro crítico ao ler o arquivo. Certifique-se de que os nomes das abas na sua "
-        f"planilha são exatamente 'alunos', 'financeiro' e 'espera'.\n\nDetalhes do erro: {e}"
+        f"Erro ao acessar as tabelas. Verifique se os nomes das abas na sua planilha do Google Sheets "
+        f"são exatamente 'alunos', 'financeiro' e 'espera'. Detalhes técnicos: {e}"
     )
     st.stop()
 
