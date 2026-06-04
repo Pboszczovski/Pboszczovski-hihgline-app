@@ -22,7 +22,7 @@ st.markdown("""
 
 # 2. CONFIGURAÇÃO DO ID DA SUA PLANILHA
 # COLE O ID QUE VOCÊ COPIOU DA SUA PLANILHA ENTRE AS ASPAS ABAIXO:
-SPREADSHEET_ID = "130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw/edit?gid=0#gid=0"
+SPREADSHEET_ID = "130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
 @st.cache_data(ttl=30)  # Atualiza os dados a cada 30 segundos
 def carregar_dados(nome_aba):
