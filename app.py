@@ -17,38 +17,39 @@ st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_at
 # ID da sua planilha extraído da URL do seu navegador
 PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
 
-# Função otimizada para carregar os dados via CSV usando os GIDs numéricos fornecidos
+# Função otimizada para carregar os dados via query string estruturada (gviz)
 @st.cache_data(ttl=60, show_spinner="Sincronizando banco de dados...")
-def carregar_dados_csv():
-    # Aba 'alunos' - O GID padrão da primeira aba é 0
-    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=0"
+def carregar_dados_seguros():
+    # Estruturação de links via Google Visualization API com GIDs específicos para evitar 404
+    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=0"
+    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=1020408012"
+    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&gid=1228435040"
     
-    # Aba 'financeiro' - Atualizado com o GID fornecido
-    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=1020408012"
-    
-    # Aba 'espera' - Atualizado com o GID fornecido
-    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=1228435040"
-    
-    # Fazendo a leitura individual e direta de cada aba
+    # Leitura individual das planilhas
     df_a = pd.read_csv(url_alunos)
     df_f = pd.read_csv(url_financeiro)
     df_e = pd.read_csv(url_espera)
     return df_a, df_f, df_e
 
 try:
-    df_alunos, df_financeiro, df_espera = carregar_dados_csv()
+    df_alunos, df_financeiro, df_espera = carregar_dados_seguros()
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
     st.error(
         f"Erro ao acessar as tabelas do Google Sheets. \n\n"
-        f"IMPORTANTE: Certifique-se de que a planilha foi compartilhada como 'Qualquer pessoa com o link pode ler'.\n\n"
+        f"IMPORTANTE: Acesse a planilha no Google Drive, clique em 'Compartilhar' e "
+        f"certifique-se de que o acesso geral está configurado para 'Qualquer pessoa com o link pode ler'.\n\n"
         f"Detalhes técnicos: {e}"
     )
     st.stop()
 
-# Indicadores na Barra Lateral (Sidebar) com base no tamanho real dos DataFrames
-total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]) if df_alunos is not None and "Status" in df_alunos.columns else len(df_alunos) if df_alunos is not None else 0
+# Inicialização de métricas seguras baseadas nos dados retornados
+if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
+    total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"])
+else:
+    total_matriculados = len(df_alunos) if df_alunos is not None else 0
+
 total_espera = len(df_espera) if df_espera is not None else 0
 
 st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
