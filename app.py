@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from streamlit_gsheets import GSheetsConnection
 
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Studio Highline - Gestão", layout="wide", page_icon="🏋️‍♂️")
@@ -14,29 +15,19 @@ data_atual = datetime.now().strftime("%d/%m/%Y")
 hora_atual = datetime.now().strftime("%H:%M")
 st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_atual}")
 
-# URL pública de exportação CSV do seu Google Sheets "Banco Highline"
-# (Substitua o ID abaixo pelo ID real da sua planilha se for necessário)
-PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
-
-@st.cache_data(ttl=60)  # Atualiza os dados a cada 1 minuto automaticamente
-def carregar_dados_abas():
-    # URL base para exportação em formato CSV estruturado por aba (gid)
-    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=0"
-    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&sheet=financeiro"
-    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&sheet=espera"
-    
-    # Lendo as abas de forma direta e independente
-    df_a = pd.read_csv(url_alunos)
-    df_f = pd.read_csv(url_financeiro)
-    df_e = pd.read_csv(url_espera)
-    return df_a, df_f, df_e
-
+# Conexão Robusta com o Google Sheets utilizando a biblioteca nativa
 try:
-    df_alunos, df_financeiro, df_espera = carregar_dados_abas()
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # Lendo as abas de forma independente puxando pelos nomes configurados
+    df_alunos = conn.read(worksheet="alunos")
+    df_financeiro = conn.read(worksheet="financeiro")
+    df_espera = conn.read(worksheet="espera")
+    
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
-    st.error(f"Erro ao acessar as abas. Verifique se a planilha está configurada como 'Qualquer pessoa com o link pode ler'. Detalhes: {e}")
+    st.error(f"Não foi possível ler as tabelas. Detalhes técnicos: {e}")
     st.stop()
 
 # Título Principal do App
@@ -60,7 +51,7 @@ with tab_agenda:
     st.subheader("📅 Agendamentos e Horários")
     st.markdown("Abaixo estão listados os treinos e agendamentos para o período:")
     
-    if not df_alunos.empty and "Horario" in df_alunos.columns:
+    if df_alunos is not None and not df_alunos.empty and "Horario" in df_alunos.columns:
         if "Status" in df_alunos.columns:
             df_hoje = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
         else:
@@ -81,17 +72,17 @@ with tab_agenda:
 with tab_alunos:
     st.subheader("👥 Controle de Alunos")
     
-    if "Status" in df_alunos.columns:
+    if df_alunos is not None and "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
-        df_ativos = df_alunos
+        df_ativos = df_alunos if df_alunos is not None else pd.DataFrame()
 
     total_matriculados = len(df_ativos)
     st.metric(label="Total de Alunos Matriculados", value=total_matriculados)
     
     busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome do aluno...", key="busca_aluno_nome")
     
-    if busca_nome:
+    if busca_nome and not df_ativos.empty:
         df_filtrado = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca_nome, case=False, na=False)]
     else:
         df_filtrado = df_ativos
@@ -117,7 +108,7 @@ with tab_alunos:
 with tab_financeiro:
     st.subheader("📊 Relatório Financeiro")
     
-    if not df_financeiro.empty:
+    if df_financeiro is not None and not df_financeiro.empty:
         if "Valor" in df_financeiro.columns:
             valores = pd.to_numeric(df_financeiro["Valor"].astype(str).str.replace("R$", "").str.replace(".", "").str.replace(",", ".").str.strip(), errors="coerce")
             faturamento_total = valores.sum()
@@ -136,10 +127,11 @@ with tab_financeiro:
 with tab_espera:
     st.subheader("⏳ Lista de Espera")
     
+    total_espera = len(df_espera) if df_espera is not None else 0
     st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
-    st.sidebar.metric(label="Fila de Espera", value=len(df_espera))
+    st.sidebar.metric(label="Fila de Espera", value=total_espera)
 
-    if not df_espera.empty:
+    if df_espera is not None and not df_espera.empty:
         st.dataframe(df_espera, use_container_width=True, hide_index=True)
     else:
         st.info("Nenhum aluno na fila de espera no momento.")
