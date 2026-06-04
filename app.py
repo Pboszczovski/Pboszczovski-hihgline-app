@@ -20,11 +20,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. CONEXÃO DIRETA COM O ID CORRIGIDO DA PLANILHA
-# Alterado rigidamente para "13O" (letra O) para evitar o erro 404
-SPREADSHEET_ID = "13OigffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
+# 2. CONEXÃO DIRETA COM O ID REAL DA SUA PLANILHA
+# ATENÇÃO: Substitua o texto abaixo pelo ID real que você copiou da sua URL!
+SPREADSHEET_ID = "130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw"
 
-@st.cache_data(ttl=10)  # Sincroniza e atualiza os dados a cada 10 segundos
+@st.cache_data(ttl=5)  # Sincroniza e atualiza os dados a cada 5 segundos
 def carregar_dados(nome_aba):
     url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={nome_aba}"
     try:
@@ -37,7 +37,7 @@ def carregar_dados(nome_aba):
         st.error(f"Erro ao ler a aba '{nome_aba}': {e}")
         return pd.DataFrame()
 
-# Chamada das abas com os nomes idênticos aos do teu Google Sheets
+# Chamada das abas com os nomes idênticos aos do seu Google Sheets
 df_alunos = carregar_dados("alunos")
 df_financeiro = carregar_dados("financeiro")
 df_espera = carregar_dados("espera")
@@ -46,7 +46,7 @@ df_espera = carregar_dados("espera")
 if not df_alunos.empty or not df_financeiro.empty or not df_espera.empty:
     st.sidebar.success("📊 Banco de dados sincronizado!")
 else:
-    st.sidebar.error("❌ Erro de leitura. Verifique os nomes das abas.")
+    st.sidebar.error("❌ Erro de leitura. Verifique se o ID inserido na linha 24 está correto.")
 
 # 3. BARRA LATERAL (SIDEBAR) ORIGINAL
 st.sidebar.title("🏋️‍♂️ Studio Highline")
@@ -83,10 +83,8 @@ with tab_agenda:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Filtro por Status (utiliza a coluna 'Status' se ela existir)
             filtro_status = st.selectbox("Filtrar por Status", ["Todos"] + (list(df_alunos['Status'].unique()) if 'Status' in colunas else []))
         with col2:
-            # Filtro por Horário (utiliza a coluna 'Horario' se ela existir)
             filtro_horario = st.selectbox("Filtrar por Horário", ["Todos"] + (list(df_alunos['Horario'].unique()) if 'Horario' in colunas else []))
         
         df_filtrado = df_alunos.copy()
