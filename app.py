@@ -17,15 +17,19 @@ st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_at
 # ID da sua planilha extraído da URL do seu navegador
 PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
 
-# Função leve para carregar dados públicos em formato CSV direto do Google
+# Função otimizada para carregar os dados via CSV usando os GIDs numéricos fornecidos
 @st.cache_data(ttl=60, show_spinner="Sincronizando banco de dados...")
 def carregar_dados_csv():
-    # Links públicos estruturados por nome de aba para exportação CSV limpa
-    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=alunos"
-    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=financeiro"
-    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/gviz/tq?tqx=out:csv&sheet=espera"
+    # Aba 'alunos' - O GID padrão da primeira aba é 0
+    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=0"
     
-    # Leitura direta e veloz
+    # Aba 'financeiro' - Atualizado com o GID fornecido
+    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=1020408012"
+    
+    # Aba 'espera' - Atualizado com o GID fornecido
+    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=1228435040"
+    
+    # Fazendo a leitura individual e direta de cada aba
     df_a = pd.read_csv(url_alunos)
     df_f = pd.read_csv(url_financeiro)
     df_e = pd.read_csv(url_espera)
@@ -36,10 +40,7 @@ try:
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
-    st.error(
-        f"Erro ao acessar as tabelas. Verifique se os nomes das abas na sua planilha do Google Sheets "
-        f"são exatamente 'alunos', 'financeiro' e 'espera'. Detalhes técnicos: {e}"
-    )
+    st.error(f"Erro ao acessar as tabelas do Google Sheets. Detalhes técnicos: {e}")
     st.stop()
 
 # Título Principal do App
@@ -55,6 +56,13 @@ tab_agenda, tab_alunos, tab_financeiro, tab_espera, tab_novos = st.tabs([
     "⏳ Lista de Espera", 
     "➕ Novos Cadastros"
 ])
+
+# Indicadores na Barra Lateral (Sidebar) com base no tamanho real dos DataFrames
+total_matriculados = len(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]) if df_alunos is not None and "Status" in df_alunos.columns else len(df_alunos) if df_alunos is not None else 0
+total_espera = len(df_espera) if df_espera is not None else 0
+
+st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
+st.sidebar.metric(label="Fila de Espera", value=total_espera)
 
 # ==========================================
 # 1. ABA: AGENDA DO DIA
@@ -89,12 +97,11 @@ with tab_alunos:
     else:
         df_ativos = df_alunos if df_alunos is not None else pd.DataFrame()
 
-    total_matriculados = len(df_ativos)
-    st.metric(label="Total de Alunos Matriculados", value=total_matriculados)
+    st.metric(label="Total de Alunos Matriculados", value=len(df_ativos))
     
     busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome do aluno...", key="busca_aluno_nome")
     
-    if busca_nome and not df_ativos.empty:
+    if busca_nome and not df_ativos.empty and "Nome" in df_ativos.columns:
         df_filtrado = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca_nome, case=False, na=False)]
     else:
         df_filtrado = df_ativos
@@ -139,10 +146,6 @@ with tab_financeiro:
 with tab_espera:
     st.subheader("⏳ Lista de Espera")
     
-    total_espera = len(df_espera) if df_espera is not None else 0
-    st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
-    st.sidebar.metric(label="Fila de Espera", value=total_espera)
-
     if df_espera is not None and not df_espera.empty:
         st.dataframe(df_espera, use_container_width=True, hide_index=True)
     else:
@@ -169,25 +172,4 @@ with tab_novos:
             dia_vencimento = st.number_input("Dia do Vencimento:", min_value=1, max_value=31, value=10, step=1)
             
         dias_aula = st.text_input("Dias de Aula (ex: Ter/Qui):")
-        horario_escolhido = st.text_input("Horário Escolhido (ex: 19:30):")
-        
-        botao_validar = st.form_submit_button("Validar Dados")
-        
-        if botao_validar:
-            if nome_completo and whatsapp:
-                st.success(f"🎉 Dados validados com sucesso para **{nome_completo}**!")
-                
-                nova_linha = {
-                    "Nome": nome_completo,
-                    "Telefone": whatsapp,
-                    "Bairro": bairro,
-                    "Plano": modalidade,
-                    "Valor": preco_mensal,
-                    "Vencimento": dia_vencimento,
-                    "Dias": dias_aula,
-                    "Horario": horario_escolhido,
-                    "Status": "Ativo"
-                }
-                st.json(nova_linha)
-            else:
-                st.error("⚠️ Por favor, preencha os campos obrigatórios (Nome Completo e WhatsApp).")
+        horario_escolhido = st.text_input("Hor
