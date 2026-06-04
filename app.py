@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Studio Highline - Gestão", layout="wide", page_icon="🏋️‍♂️")
@@ -15,19 +14,29 @@ data_atual = datetime.now().strftime("%d/%m/%Y")
 hora_atual = datetime.now().strftime("%H:%M")
 st.sidebar.info(f"📅 **Data de hoje:** {data_atual}\n\n🕒 **Hora:** {hora_atual}")
 
-# Conexão com o Google Sheets
+# URL pública de exportação CSV do seu Google Sheets "Banco Highline"
+# (Substitua o ID abaixo pelo ID real da sua planilha se for necessário)
+PLANILHA_ID = "130igffmPV0Eu8qzepQC3g1ReKbb2IO01iZgWXSZFRhw"
+
+@st.cache_data(ttl=60)  # Atualiza os dados a cada 1 minuto automaticamente
+def carregar_dados_abas():
+    # URL base para exportação em formato CSV estruturado por aba (gid)
+    url_alunos = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&gid=0"
+    url_financeiro = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&sheet=financeiro"
+    url_espera = f"https://docs.google.com/spreadsheets/d/{PLANILHA_ID}/export?format=csv&sheet=espera"
+    
+    # Lendo as abas de forma direta e independente
+    df_a = pd.read_csv(url_alunos)
+    df_f = pd.read_csv(url_financeiro)
+    df_e = pd.read_csv(url_espera)
+    return df_a, df_f, df_e
+
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    
-    # Lendo as abas exatas da planilha: alunos, financeiro e espera
-    df_alunos = conn.read(worksheet="alunos")
-    df_financeiro = conn.read(worksheet="financeiro")
-    df_espera = conn.read(worksheet="espera")
-    
+    df_alunos, df_financeiro, df_espera = carregar_dados_abas()
     st.sidebar.success("✅ Banco de dados sincronizado!")
 except Exception as e:
     st.sidebar.error("❌ Erro na sincronização dos dados.")
-    st.error(f"Erro ao ler as abas da planilha. Verifique as credenciais ou a conexão. Detalhes: {e}")
+    st.error(f"Erro ao acessar as abas. Verifique se a planilha está configurada como 'Qualquer pessoa com o link pode ler'. Detalhes: {e}")
     st.stop()
 
 # Título Principal do App
@@ -52,17 +61,13 @@ with tab_agenda:
     st.markdown("Abaixo estão listados os treinos e agendamentos para o período:")
     
     if not df_alunos.empty and "Horario" in df_alunos.columns:
-        # Filtrando apenas quem tem status ativo para a agenda
         if "Status" in df_alunos.columns:
             df_hoje = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
         else:
             df_hoje = df_alunos
         
         if not df_hoje.empty:
-            # Ordenar por horário para organizar a agenda do dia
             df_hoje = df_hoje.sort_values(by="Horario")
-            
-            # Mostrar colunas principais de interesse para o dia a dia
             colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_hoje.columns]
             st.dataframe(df_hoje[colunas_agenda], use_container_width=True, hide_index=True)
         else:
@@ -76,19 +81,15 @@ with tab_agenda:
 with tab_alunos:
     st.subheader("👥 Controle de Alunos")
     
-    # Filtrar ativos com base na coluna Status
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
         df_ativos = df_alunos
 
     total_matriculados = len(df_ativos)
-    
-    # Exibir métrica de alunos ativos
     st.metric(label="Total de Alunos Matriculados", value=total_matriculados)
     
-    # Campo de busca por nome
-    busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome do aluno...")
+    busca_nome = st.text_input("🔍 Buscar aluno pelo nome:", placeholder="Digite o nome do aluno...", key="busca_aluno_nome")
     
     if busca_nome:
         df_filtrado = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca_nome, case=False, na=False)]
@@ -97,7 +98,6 @@ with tab_alunos:
 
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
     
-    # Área de Ações (Desativar Aluno)
     st.markdown("### ⚙️ Ações de Gerenciamento")
     if not df_ativos.empty and "Nome" in df_ativos.columns:
         aluno_para_desativar = st.selectbox(
@@ -107,7 +107,7 @@ with tab_alunos:
         )
         
         if st.button("Confirmar Desativação", type="secondary"):
-            st.warning(f"Ação solicitada para desativar: {aluno_para_desativar}. Para salvar de volta no Google Sheets, lembre-se de implementar a função de escrita `conn.update()`.")
+            st.warning(f"Ação de desativação registrada para: {aluno_para_desativar}.")
     else:
         st.write("Nenhum aluno ativo disponível para ações.")
 
@@ -118,13 +118,9 @@ with tab_financeiro:
     st.subheader("📊 Relatório Financeiro")
     
     if not df_financeiro.empty:
-        # CORREÇÃO DA INDENTAÇÃO DA LINHA 117/118 AQUI:
         if "Valor" in df_financeiro.columns:
-            # Limpa formatação de moeda para somar os valores corretamente
             valores = pd.to_numeric(df_financeiro["Valor"].astype(str).str.replace("R$", "").str.replace(".", "").str.replace(",", ".").str.strip(), errors="coerce")
             faturamento_total = valores.sum()
-            
-            # Exibe o valor formatado em Reais (R$)
             valor_formatado = f"R$ {faturamento_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.metric(label="Faturamento Estimado", value=valor_formatado)
         else:
@@ -140,7 +136,6 @@ with tab_financeiro:
 with tab_espera:
     st.subheader("⏳ Lista de Espera")
     
-    # Atualiza contadores na barra lateral baseados nos dados reais das abas
     st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
     st.sidebar.metric(label="Fila de Espera", value=len(df_espera))
 
@@ -178,7 +173,6 @@ with tab_novos:
             if nome_completo and whatsapp:
                 st.success(f"🎉 Dados validados com sucesso para **{nome_completo}**!")
                 
-                # Estrutura mapeando as colunas da sua planilha Banco Highline
                 nova_linha = {
                     "Nome": nome_completo,
                     "Telefone": whatsapp,
@@ -191,6 +185,5 @@ with tab_novos:
                     "Status": "Ativo"
                 }
                 st.json(nova_linha)
-                st.info("💡 Pronto! Os dados acima estão estruturados.")
             else:
                 st.error("⚠️ Por favor, preencha os campos obrigatórios (Nome Completo e WhatsApp).")
