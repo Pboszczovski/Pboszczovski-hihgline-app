@@ -53,7 +53,10 @@ with tab_agenda:
     
     if not df_alunos.empty and "Horario" in df_alunos.columns:
         # Filtrando apenas quem tem status ativo para a agenda
-        df_hoje = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos
+        if "Status" in df_alunos.columns:
+            df_hoje = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
+        else:
+            df_hoje = df_alunos
         
         if not df_hoje.empty:
             # Ordenar por horário para organizar a agenda do dia
@@ -94,7 +97,7 @@ with tab_alunos:
 
     st.dataframe(df_filtrado, use_container_width=True, hide_index=True)
     
-    # Área de Ações (Desativar Aluno) - LINHA 201 CORRIGIDA E FECHADA
+    # Área de Ações (Desativar Aluno)
     st.markdown("### ⚙️ Ações de Gerenciamento")
     if not df_ativos.empty and "Nome" in df_ativos.columns:
         aluno_para_desativar = st.selectbox(
@@ -115,4 +118,79 @@ with tab_financeiro:
     st.subheader("📊 Relatório Financeiro")
     
     if not df_financeiro.empty:
-        # Calcular faturamento se houver coluna Valor
+        # CORREÇÃO DA INDENTAÇÃO DA LINHA 117/118 AQUI:
+        if "Valor" in df_financeiro.columns:
+            # Limpa formatação de moeda para somar os valores corretamente
+            valores = pd.to_numeric(df_financeiro["Valor"].astype(str).str.replace("R$", "").str.replace(".", "").str.replace(",", ".").str.strip(), errors="coerce")
+            faturamento_total = valores.sum()
+            
+            # Exibe o valor formatado em Reais (R$)
+            valor_formatado = f"R$ {faturamento_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.metric(label="Faturamento Estimado", value=valor_formatado)
+        else:
+            st.info("Coluna 'Valor' não encontrada na aba financeiro.")
+        
+        st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum registro financeiro localizado.")
+
+# ==========================================
+# 4. ABA: LISTA DE ESPERA
+# ==========================================
+with tab_espera:
+    st.subheader("⏳ Lista de Espera")
+    
+    # Atualiza contadores na barra lateral baseados nos dados reais das abas
+    st.sidebar.metric(label="Alunos Ativos", value=total_matriculados)
+    st.sidebar.metric(label="Fila de Espera", value=len(df_espera))
+
+    if not df_espera.empty:
+        st.dataframe(df_espera, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum aluno na fila de espera no momento.")
+
+# ==========================================
+# 5. ABA: NOVOS CADASTROS (GERADOR DE CARGA)
+# ==========================================
+with tab_novos:
+    st.subheader("➕ Gerador de Carga para Novos Alunos")
+    st.markdown("Preencha o formulário abaixo para validar e gerar a linha perfeitamente formatada para o Google Sheets.")
+    
+    with st.form("form_novo_aluno", clear_on_submit=True):
+        nome_completo = st.text_input("Nome Completo:")
+        whatsapp = st.text_input("WhatsApp com DDD:")
+        bairro = st.text_input("Bairro:")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            modalidade = st.selectbox("Modalidade de Contrato:", ["Mensal", "Trimestral", "Semestral", "Anual"])
+        with col2:
+            preco_mensal = st.number_input("Preço Mensal (R$):", min_value=0.0, value=150.00, step=10.00)
+        with col3:
+            dia_vencimento = st.number_input("Dia do Vencimento:", min_value=1, max_value=31, value=10, step=1)
+            
+        dias_aula = st.text_input("Dias de Aula (ex: Ter/Qui):")
+        horario_escolhido = st.text_input("Horário Escolhido (ex: 19:30):")
+        
+        botao_validar = st.form_submit_button("Validar Dados")
+        
+        if botao_validar:
+            if nome_completo and whatsapp:
+                st.success(f"🎉 Dados validados com sucesso para **{nome_completo}**!")
+                
+                # Estrutura mapeando as colunas da sua planilha Banco Highline
+                nova_linha = {
+                    "Nome": nome_completo,
+                    "Telefone": whatsapp,
+                    "Bairro": bairro,
+                    "Plano": modalidade,
+                    "Valor": preco_mensal,
+                    "Vencimento": dia_vencimento,
+                    "Dias": dias_aula,
+                    "Horario": horario_escolhido,
+                    "Status": "Ativo"
+                }
+                st.json(nova_linha)
+                st.info("💡 Pronto! Os dados acima estão estruturados.")
+            else:
+                st.error("⚠️ Por favor, preencha os campos obrigatórios (Nome Completo e WhatsApp).")
