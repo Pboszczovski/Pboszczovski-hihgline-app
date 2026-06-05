@@ -130,7 +130,7 @@ if menu == "📅 Agenda":
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
-# --- 2. TELA: ALUNOS (COM MODAL DE EDIÇÃO E EXCLUSÃO/ARQUIVO MORTO) ---
+# --- 2. TELA: ALUNOS (COM MODAL DE EDIÇÃO E EXCLUSÃO) ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
     
@@ -180,13 +180,11 @@ elif menu == "👥 Alunos":
                     st.code(linha_atualizada_csv, language="text")
                 
                 st.markdown("---")
-                # --- SEÇÃO RESTABELECIDA PARA ARQUIVO MORTO ---
                 st.markdown("### ❌ Desativação (Arquivo Morto)")
                 st.write("Se o aluno deixou de fazer as aulas, gere a linha de inativação abaixo:")
                 
                 if st.button("Gerar Linha de Inativação", key="btn_inativar"):
                     st.warning(f"Linha de desativação gerada para {aluno_para_editar}. Substitua a linha dele na planilha por esta para movê-lo ao Arquivo Morto:")
-                    # Cria a linha exatamente igual, mas muda o Status de "Ativo" para "Inativo"
                     linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_atuais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
                     st.code(linha_inativo_csv, language="text")
         else:
@@ -202,11 +200,43 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("A coluna 'Status' não foi localizada.")
 
-# --- 4. TELA: ESPERA ---
+# --- 4. TELA: ESPERA (RESTABELECIDA COM CADASTRO DE POTENCIAL ALUNO) ---
 elif menu == "⏳ Espera":
     st.title("⏳ Lista de Espera")
     st.metric("Total de Clientes em Espera", len(df_espera))
-    st.dataframe(df_espera, use_container_width=True, hide_index=True)
+    
+    col_tabela, col_cadastro_espera = st.columns([2, 1])
+    
+    with col_tabela:
+        busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
+        df_espera_tabela = df_espera.copy()
+        if busca_espera and not df_espera.empty:
+            # Tenta filtrar pela primeira coluna da aba (geralmente Nome ou correspondente)
+            col_nome_esp = df_espera.columns[0]
+            df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
+        st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
+
+    with col_cadastro_espera:
+        st.markdown("### ➕ Registrar na Lista de Espera")
+        st.write("Insira os dados do potencial aluno para gerar a nova linha da planilha:")
+        
+        with st.form("form_lista_espera"):
+            esp_nome = st.text_input("Nome do Lead / Potencial Aluno:")
+            esp_tel = st.text_input("WhatsApp / Telefone:")
+            esp_horario = st.text_input("Horário de Preferência (Ex: 19:00):")
+            esp_dias = st.text_input("Dias Desejados (Ex: Seg/Qua):")
+            esp_obs = st.text_area("Objetivo / Patologia / Queixa Principal:")
+            esp_status = st.selectbox("Status de Contrato/Contato:", ["Aguardando Vaga", "Contato Inicial", "Agendando Experimental"])
+            esp_data_reg = st.text_input("Data de Registro:", value=datetime.now().strftime("%d/%m/%Y"))
+            
+            if st.form_submit_button("Gerar Linha para Lista de Espera"):
+                if esp_nome and esp_tel:
+                    st.success("🎉 Linha gerada! Copie e cole na última linha em branco da aba 'Espera':")
+                    # Monta a estrutura mapeada para as colunas comuns da lista de espera
+                    linha_espera_csv = f'"{esp_nome}","{esp_tel}","{esp_horario}","{esp_dias}","{esp_obs}","{esp_status}","{esp_data_reg}"'
+                    st.code(linha_espera_csv, language="text")
+                else:
+                    st.error("Por favor, preencha os campos obrigatórios: Nome e WhatsApp.")
 
 # --- 5. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
