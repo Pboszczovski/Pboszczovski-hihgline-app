@@ -54,8 +54,8 @@ try:
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     # Carrega os dados em tempo real de cada aba
-    df_alunos = conn.read(worksheet="Alunos", keep_default_na=False)
-    df_financeiro = conn.read(worksheet="Financeiro", keep_default_na=False)
+   df_alunos = conn.read(worksheet="Alunos", usecols=[0, 1, 2, 3])
+    df_financeiro = conn.read(worksheet="Financeiro"
     df_espera = conn.read(worksheet="Lista de Espera", keep_default_na=False)
     conexao_ok = True
 except Exception as e:
