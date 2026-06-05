@@ -55,7 +55,7 @@ try:
     
     # Carrega os dados em tempo real de cada aba
     df_alunos = conn.read(spreadsheet="130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw", worksheet="Alunos")
-    df_financeiro = conn.read(worksheet="Financeiro"
+    df_financeiro = conn.read(spreadsheet="130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw", worksheet="Financeiro")
     df_espera = conn.read(worksheet="Lista de Espera", keep_default_na=False)
     conexao_ok = True
 except Exception as e:
