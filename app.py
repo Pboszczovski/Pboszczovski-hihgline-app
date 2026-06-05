@@ -130,21 +130,62 @@ if menu == "📅 Agenda":
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
-# --- 2. TELA: ALUNOS ---
+# --- 2. TELA: ALUNOS (COM MODAL DE EDIÇÃO INTEGRADO) ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    busca = st.text_input("🔍 Filtrar aluno por nome:", placeholder="Digite o nome completo ou parcial...")
     
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
         df_ativos = df_alunos.copy()
-        
-    if busca and "Nome" in df_ativos.columns:
-        df_ativos = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
-        
+
     st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
-    st.dataframe(df_ativos, use_container_width=True, hide_index=True)
+    
+    # Linha superior de busca e seleção para edição
+    col_busca, col_edit = st.columns([2, 1])
+    with col_busca:
+        busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo ou parcial...")
+        if busca and "Nome" in df_ativos.columns:
+            df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
+        else:
+            df_ativos_tabela = df_ativos
+        
+        st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
+
+    with col_edit:
+        st.markdown("### ✏️ Alteração Rápida de Dados")
+        if "Nome" in df_ativos.columns and not df_ativos.empty:
+            aluno_para_editar = st.selectbox("Selecione para editar:", ["-- Escolha um Aluno --"] + df_ativos["Nome"].tolist())
+            
+            if aluno_para_editar != "-- Escolha um Aluno--":
+                # Extrai a linha atual do aluno selecionado
+                dados_atuais = df_ativos[df_ativos["Nome"] == aluno_para_editar].iloc[0]
+                
+                # Campos de edição com os dados originais populados
+                lista_planos = ["1x semana", "2x semana", "3x semana", "Outro"]
+                plano_atual = dados_atuais.get("Plano", "1x semana")
+                idx_plano = lista_planos.index(plano_atual) if plano_atual in lista_planos else 0
+                
+                novo_plano = st.selectbox("Novo Plano Contratado:", lista_planos, index=idx_plano)
+                novos_dias = st.text_input("Novos Dias de Aula Fixados:", value=dados_atuais.get("Dias", ""))
+                novo_horario = st.text_input("Novo Horário Escolhido:", value=dados_atuais.get("Horario", ""))
+                
+                # Mantém o valor sugerido conforme a tabela oficial se o plano mudar
+                valor_sugerido = dados_atuais.get("Valor", "220,00")
+                if novo_plano == "1x semana": valor_sugerido = "180,00"
+                elif novo_plano == "2x semana": valor_sugerido = "220,00"
+                elif novo_plano == "3x semana": valor_sugerido = "300,00"
+                
+                novo_valor = st.text_input("Confirmar Valor Mensal (R$):", value=valor_sugerido)
+                
+                if st.button("Gerar Atualização de Cadastro"):
+                    st.success(f"Dados atualizados para {aluno_para_editar}! Substitua a linha antiga na sua planilha por esta nova:")
+                    
+                    # Reconstrói a linha CSV mantendo os dados clínicos intactos, atualizando apenas a rotina e plano
+                    linha_atualizada_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{novo_plano}","{novo_valor}",{dados_atuais.get("Vencimento",10)},"{novos_dias}","{novo_horario}","Ativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
+                    st.code(linha_updated_csv := linha_atualizada_csv, language="text")
+        else:
+            st.info("Nenhum aluno disponível para edição.")
 
 # --- 3. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
@@ -186,7 +227,6 @@ elif menu == "👤 Perfil":
                 st.markdown(f"📞 **Telefone:** {ficha.get('Telefone', 'N/D')}")
                 st.markdown(f"🏡 **Bairro:** {ficha.get('Bairro', 'N/D')}")
                 st.markdown(f"🧬 **Gênero:** {ficha.get('Genero', 'N/D')}")
-                # Exibe o CPF se a coluna existir na busca
                 st.markdown(f"🪪 **CPF:** {ficha.get('CPF', 'N/D')}")
             with c2:
                 st.markdown(f"📅 **Nascimento:** {ficha.get('Nascimento', 'N/D')}")
@@ -197,7 +237,6 @@ elif menu == "👤 Perfil":
                 st.markdown(f"📆 **Vencimento:** Dia {ficha.get('Vencimento', 'N/D')}")
                 st.markdown(f"⚡ **Status:** {ficha.get('Status', 'N/D')}")
             
-            # Exibe o Endereço Completo se a coluna existir na busca
             st.markdown(f"📍 **Endereço Completo:** {ficha.get('Endereco', 'N/D')}")
             
             st.markdown("---")
@@ -218,7 +257,6 @@ elif menu == "📝 Cadastro":
         st.subheader("1. Dados Pessoais e de Contrato")
         nome_c = st.text_input("Nome Completo:")
         
-        # Inclusão dos novos campos solicitados na interface
         col_id1, col_id2 = st.columns(2)
         with col_id1:
             tel_c = st.text_input("WhatsApp com DDD (Ex: 11999998888):")
@@ -295,7 +333,6 @@ elif menu == "📝 Cadastro":
 
         if st.form_submit_button("Validar e Gerar Linha de Cadastro"):
             if nome_c and tel_c:
-                # Processa a string de queixas
                 lista_queixas = []
                 if q_lombar: lista_queixas.append("Dor Lombar")
                 if q_cervical: lista_queixas.append("Dor Cervical")
@@ -312,7 +349,6 @@ elif menu == "📝 Cadastro":
                 if queixa_extra: lista_queixas.append(queixa_extra)
                 string_queixas = " | ".join(lista_queixas) if lista_queixas else "Sem queixas registradas"
 
-                # Processa a string de condutas e progressos
                 lista_condutas = []
                 if c_fortalece: lista_condutas.append("Fortalecimento de Core")
                 if c_reab: lista_condutas.append("Reabilitação")
@@ -330,8 +366,6 @@ elif menu == "📝 Cadastro":
                 string_condutas = " | ".join(lista_condutas) if lista_condutas else "Conduta padrão"
 
                 st.success("🎉 Linha estruturada gerada com sucesso! Copie e cole na última linha vazia da aba 'Alunos':")
-                
-                # Monta a string respeitando a ordem das 14 originais + CPF e Endereço adicionados ao final
                 linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
                 st.code(linha_csv, language="text")
             else:
@@ -351,7 +385,7 @@ elif menu == "💰 Financeiro":
 
 # --- 9. TELA: PREÇOS Tabela Oficial Fixada ---
 elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela de Preços e Models de Planos")
+    st.title("⚙️ Tabela de Preços e Modelos de Planos")
     st.markdown("Abaixo estão listados os planos de contratação oficiais vigentes no **Studio Highline**:")
     
     dados_precos_oficiais = {
