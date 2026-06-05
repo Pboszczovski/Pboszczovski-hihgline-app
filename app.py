@@ -130,7 +130,7 @@ if menu == "📅 Agenda":
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
-# --- 2. TELA: ALUNOS (COM MODAL DE EDIÇÃO E EXCLUSÃO) ---
+# --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
     
@@ -200,43 +200,47 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("A coluna 'Status' não foi localizada.")
 
-# --- 4. TELA: ESPERA (RESTABELECIDA COM CADASTRO DE POTENCIAL ALUNO) ---
+# --- 4. TELA: ESPERA (LAYOUT EM LARGURA TOTAL CORRIGIDO) ---
 elif menu == "⏳ Espera":
     st.title("⏳ Lista de Espera")
     st.metric("Total de Clientes em Espera", len(df_espera))
     
-    col_tabela, col_cadastro_espera = st.columns([2, 1])
+    # Busca e Tabela ocupando a largura total inicial
+    busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
+    df_espera_tabela = df_espera.copy()
+    if busca_espera and not df_espera.empty:
+        col_nome_esp = df_espera.columns[0]
+        df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
     
-    with col_tabela:
-        busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
-        df_espera_tabela = df_espera.copy()
-        if busca_espera and not df_espera.empty:
-            # Tenta filtrar pela primeira coluna da aba (geralmente Nome ou correspondente)
-            col_nome_esp = df_espera.columns[0]
-            df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
-        st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
+    st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
 
-    with col_cadastro_espera:
-        st.markdown("### ➕ Registrar na Lista de Espera")
-        st.write("Insira os dados do potencial aluno para gerar a nova linha da planilha:")
-        
-        with st.form("form_lista_espera"):
+    st.markdown("---")
+    
+    # Formulário reposicionado logo abaixo em largura completa e organizado em colunas
+    st.markdown("### ➕ Registrar na Lista de Espera")
+    st.write("Insira os dados do potencial aluno para gerar a nova linha formatada para a sua planilha:")
+    
+    with st.form("form_lista_espera_largo"):
+        c_esp1, c_esp2, c_esp3 = st.columns(3)
+        with c_esp1:
             esp_nome = st.text_input("Nome do Lead / Potencial Aluno:")
             esp_tel = st.text_input("WhatsApp / Telefone:")
+        with c_esp2:
             esp_horario = st.text_input("Horário de Preferência (Ex: 19:00):")
             esp_dias = st.text_input("Dias Desejados (Ex: Seg/Qua):")
-            esp_obs = st.text_area("Objetivo / Patologia / Queixa Principal:")
+        with c_esp3:
             esp_status = st.selectbox("Status de Contrato/Contato:", ["Aguardando Vaga", "Contato Inicial", "Agendando Experimental"])
             esp_data_reg = st.text_input("Data de Registro:", value=datetime.now().strftime("%d/%m/%Y"))
             
-            if st.form_submit_button("Gerar Linha para Lista de Espera"):
-                if esp_nome and esp_tel:
-                    st.success("🎉 Linha gerada! Copie e cole na última linha em branco da aba 'Espera':")
-                    # Monta a estrutura mapeada para as colunas comuns da lista de espera
-                    linha_espera_csv = f'"{esp_nome}","{esp_tel}","{esp_horario}","{esp_dias}","{esp_obs}","{esp_status}","{esp_data_reg}"'
-                    st.code(linha_espera_csv, language="text")
-                else:
-                    st.error("Por favor, preencha os campos obrigatórios: Nome e WhatsApp.")
+        esp_obs = st.text_area("Objetivo / Patologia / Queixa Principal:")
+        
+        if st.form_submit_button("Validar e Gerar Linha para Lista de Espera"):
+            if esp_nome and esp_tel:
+                st.success("🎉 Linha estruturada com sucesso! Copie e cole na última linha em branco da aba 'Espera' (Google Sheets):")
+                linha_espera_csv = f'"{esp_nome}","{esp_tel}","{esp_horario}","{esp_dias}","{esp_obs}","{esp_status}","{esp_data_reg}"'
+                st.code(linha_espera_csv, language="text")
+            else:
+                st.error("Por favor, os campos 'Nome' e 'WhatsApp / Telefone' são obrigatórios.")
 
 # --- 5. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
@@ -418,7 +422,7 @@ elif menu == "💰 Financeiro":
         st.metric(label="Faturamento Total Acumulado", value=valor_formatado)
     st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
 
-# --- 9. TELA: PREÇOS Tabela Oficial Fixada ---
+# --- 9. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Tabela de Preços e Modelos de Planos")
     st.markdown("Abaixo estão listados os planos de contratação oficiais vigentes no **Studio Highline**:")
