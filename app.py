@@ -186,6 +186,8 @@ elif menu == "👤 Perfil":
                 st.markdown(f"📞 **Telefone:** {ficha.get('Telefone', 'N/D')}")
                 st.markdown(f"🏡 **Bairro:** {ficha.get('Bairro', 'N/D')}")
                 st.markdown(f"🧬 **Gênero:** {ficha.get('Genero', 'N/D')}")
+                # Exibe o CPF se a coluna existir na busca
+                st.markdown(f"🪪 **CPF:** {ficha.get('CPF', 'N/D')}")
             with c2:
                 st.markdown(f"📅 **Nascimento:** {ficha.get('Nascimento', 'N/D')}")
                 st.markdown(f"🚀 **Início das Aulas:** {ficha.get('Inicio_Aulas', 'N/D')}")
@@ -194,6 +196,10 @@ elif menu == "👤 Perfil":
                 st.markdown(f"💰 **Valor Mensal:** {ficha.get('Valor', 'N/D')}")
                 st.markdown(f"📆 **Vencimento:** Dia {ficha.get('Vencimento', 'N/D')}")
                 st.markdown(f"⚡ **Status:** {ficha.get('Status', 'N/D')}")
+            
+            # Exibe o Endereço Completo se a coluna existir na busca
+            st.markdown(f"📍 **Endereço Completo:** {ficha.get('Endereco', 'N/D')}")
+            
             st.markdown("---")
             col_q, col_c = st.columns(2)
             with col_q:
@@ -203,7 +209,7 @@ elif menu == "👤 Perfil":
                 st.subheader("🛠️ Conduta Clínica-Desportiva & Evolução")
                 st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
 
-# --- 7. TELA: CADASTRO COM ANAMNESE E CAIXA DE PROGRESSOS ---
+# --- 7. TELA: CADASTRO COM ANAMNESE, CPF E ENDEREÇO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     st.markdown("Selecione as opções clínicas correspondentes para gerar automaticamente a linha de dados formatada para o Google Sheets.")
@@ -211,15 +217,25 @@ elif menu == "📝 Cadastro":
     with st.form("form_novo_aluno_anamnese_avancada"):
         st.subheader("1. Dados Pessoais e de Contrato")
         nome_c = st.text_input("Nome Completo:")
-        tel_c = st.text_input("WhatsApp com DDD (Ex: 11999998888):")
-        bairro_c = st.text_input("Bairro de Residência:")
+        
+        # Inclusão dos novos campos solicitados na interface
+        col_id1, col_id2 = st.columns(2)
+        with col_id1:
+            tel_c = st.text_input("WhatsApp com DDD (Ex: 11999998888):")
+        with col_id2:
+            cpf_c = st.text_input("CPF (Ex: 000.000.000-00):")
+            
+        col_end1, col_end2 = st.columns([1, 2])
+        with col_end1:
+            bairro_c = st.text_input("Bairro de Residência:")
+        with col_end2:
+            endereco_c = st.text_input("Endereço Completo (Rua, Número, Complemento):")
         
         col1, col2, col3 = st.columns(3)
         with col1:
             genero_c = st.selectbox("Gênero:", ["Masculino", "Feminino", "Outro"])
             nasc_c = st.text_input("Data de Nascimento (DD/MM/AAAA):")
         with col2:
-            # Planos ajustados com base na frequência semanal informada
             plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana", "Outro"])
             valor_c = st.text_input("Valor Combinado (R$):", value="220,00")
         with col3:
@@ -275,7 +291,7 @@ elif menu == "📝 Cadastro":
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações Técnicas:")
         
         st.subheader("5. Evolução e Acompanhamento Clínico")
-        progresso_c = st.text_area("Evolução / Histórico de Progressos do Aluno em Relação ao Tratamento:", placeholder="Registre aqui a evolução das dores, ganho de mobilidade, respostas aos exercícios e relatos de melhora do aluno ao longo do tempo...")
+        progresso_c = st.text_area("Evolução / Histórico de Progressos do Aluno em Relação ao Tratamento:", placeholder="Registre aqui a evolução das dores, ganho de mobilidade...")
 
         if st.form_submit_button("Validar e Gerar Linha de Cadastro"):
             if nome_c and tel_c:
@@ -315,7 +331,8 @@ elif menu == "📝 Cadastro":
 
                 st.success("🎉 Linha estruturada gerada com sucesso! Copie e cole na última linha vazia da aba 'Alunos':")
                 
-                linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}"'
+                # Monta a string respeitando a ordem das 14 originais + CPF e Endereço adicionados ao final
+                linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
                 st.code(linha_csv, language="text")
             else:
                 st.error("Erro: Os campos 'Nome' e 'WhatsApp' são obrigatórios.")
@@ -334,22 +351,18 @@ elif menu == "💰 Financeiro":
 
 # --- 9. TELA: PREÇOS Tabela Oficial Fixada ---
 elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela de Preços e Modelos de Planos")
+    st.title("⚙️ Tabela de Preços e Models de Planos")
     st.markdown("Abaixo estão listados os planos de contratação oficiais vigentes no **Studio Highline**:")
     
-    # Criando a estrutura de dados com a tabela de preços oficial informada
     dados_precos_oficiais = {
         "Frequência Semanal": ["1x na semana", "2x na semana", "3x na semana"],
         "Valor Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"]
     }
     df_tabela_oficial = pd.DataFrame(dados_precos_oficiais)
-    
-    # Renderiza a tabela de forma limpa e direta
     st.table(df_tabela_oficial)
     
     st.markdown("---")
     st.subheader("Auditoria de Valores Praticados (Planilha de Alunos)")
-    # Mantém também a auditoria dinâmica para você saber se tem alguém fora do valor padrão
     if "Plano" in df_alunos.columns and "Valor" in df_alunos.columns:
         df_precos = df_alunos.groupby("Plano")["Valor"].unique().reset_index()
         df_precos["Valores em Uso na Ficha"] = df_precos["Valor"].apply(lambda x: ", ".join([str(i) for i in x if i != ""]))
