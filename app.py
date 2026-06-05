@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from datetime import datetime
 
 # ==========================================
@@ -57,7 +58,6 @@ except Exception as e:
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
 # ==========================================
 def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
-    """Retorna uma lista de tuplas (dia, lotado) e os nomes dos alunos atuais."""
     if "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
         return [], []
         
@@ -65,12 +65,10 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     if aluno_ignorados:
         df_ativos = df_ativos[df_ativos["Nome"] != aluno_ignorados]
         
-    # Limpa strings de horário
     h_alvo = str(horario_input).strip()
     if not h_alvo or not dias_input:
         return [], []
         
-    # Identifica os dias solicitados (separados por / ou , ou espaço)
     dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
     
     conflitos = []
@@ -80,13 +78,10 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
         h_atual = str(row["Horario"]).strip()
         if h_atual == h_alvo:
             d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
-            
-            # Verifica interseção de dias
             dias_comuns = set(dias_solicitados).intersection(set(d_atual))
             if dias_comuns:
                 alunos_no_horario.append(f"{row['Nome']} ({row['Dias']})")
                 
-    # Contagem exata por dia da semana
     for dia in dias_solicitados:
         qtd_no_dia = 0
         for idx, row in df_ativos.iterrows():
@@ -140,7 +135,6 @@ if not conexao_ok:
 # --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos")
-    
     hoje_mm_dd = datetime.now().strftime("%m-%d")
     niver_hoje = []
     
@@ -175,17 +169,15 @@ if menu == "📅 Agenda":
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
-# --- 2. TELA: ALUNOS (COM VALIDAÇÃO DE CAPACIDADE NA ALTERAÇÃO) ---
+# --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
         df_ativos = df_alunos.copy()
 
     st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
-    
     busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo ou parcial...")
     if busca and "Nome" in df_ativos.columns:
         df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
@@ -202,7 +194,6 @@ elif menu == "👥 Alunos":
         
         if aluno_para_editar != "-- Escolha um Aluno --":
             dados_atuais = df_ativos[df_ativos["Nome"] == aluno_para_editar].iloc[0]
-            
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             
             with c_ed1:
@@ -221,7 +212,6 @@ elif menu == "👥 Alunos":
                 novos_dias = st.text_input("Novos Dias de Aula Fixados (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
                 novo_horario = st.text_input("Novo Horário Escolhido (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
-            # Validação em Tempo Real na Edição
             bloqueio_edicao = False
             if novos_dias and novo_horario:
                 conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
@@ -255,47 +245,17 @@ elif menu == "📁 Arquivo Morto":
         df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() != "ATIVO"]
         st.metric("Total de Alunos no Arquivo Morto", len(df_inativos))
         st.dataframe(df_inativos, use_container_width=True, hide_index=True)
-    else:
-        st.info("A coluna 'Status' não foi localizada.")
 
 # --- 4. TELA: ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Lista de Espera")
     st.metric("Total de Clientes em Espera", len(df_espera))
-    
     busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
     df_espera_tabela = df_espera.copy()
     if busca_espera and not df_espera.empty:
         col_nome_esp = df_espera.columns[0]
         df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
-    
     st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.markdown("### ➕ Registrar na Lista de Espera")
-    st.write("Insira os dados do potencial aluno para gerar a nova linha formatada para a sua planilha:")
-    
-    with st.form("form_lista_espera_largo"):
-        c_esp1, c_esp2, c_esp3 = st.columns(3)
-        with c_esp1:
-            esp_nome = st.text_input("Nome do Lead / Potencial Aluno:")
-            esp_tel = st.text_input("WhatsApp / Telefone:")
-        with c_esp2:
-            esp_horario = st.text_input("Horário de Preferência (Ex: 19:00):")
-            esp_dias = st.text_input("Dias Desejados (Ex: Seg/Qua):")
-        with c_esp3:
-            esp_status = st.selectbox("Status de Contrato/Contato:", ["Aguardando Vaga", "Contato Inicial", "Agendando Experimental"])
-            esp_data_reg = st.text_input("Data de Registro:", value=datetime.now().strftime("%d/%m/%Y"))
-            
-        esp_obs = st.text_area("Objetivo / Patologia / Queixa Principal:")
-        
-        if st.form_submit_button("Validar e Gerar Linha para Lista de Espera"):
-            if esp_nome and esp_tel:
-                st.success("🎉 Linha estruturada com sucesso! Copie e cole na última linha em branco da aba 'Espera' (Google Sheets):")
-                linha_espera_csv = f'"{esp_nome}","{esp_tel}","{esp_horario}","{esp_dias}","{esp_obs}","{esp_status}","{esp_data_reg}"'
-                st.code(linha_espera_csv, language="text")
-            else:
-                st.error("Por favor, os campos 'Nome' e 'WhatsApp / Telefone' são obrigatórios.")
 
 # --- 5. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
@@ -305,14 +265,19 @@ elif menu == "🗺️ Mapa":
         contagem = df_bairros["Bairro"].value_counts().reset_index()
         contagem.columns = ["Bairro", "Quantidade de Alunos"]
         st.bar_chart(data=contagem, x="Bairro", y="Quantidade de Alunos")
-        st.dataframe(contagem, use_container_width=True, hide_index=True)
 
-# --- 6. TELA: PERFIL ---
+# --- 6. TELA: PERFIL (COM PRONTUÁRIO INDIVIDUAL + DASHBOARD ESTATÍSTICO) ---
 elif menu == "👤 Perfil":
     st.title("👤 Ficha Clínica-Desportiva Analítica")
+    
+    if "Status" in df_alunos.columns:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
+    else:
+        df_ativos = df_alunos.copy()
+
     if "Nome" in df_alunos.columns:
-        aluno_sel = st.selectbox("Selecione um aluno para extrair o prontuário completo:", df_alunos["Nome"].tolist())
-        if aluno_sel:
+        aluno_sel = st.selectbox("Selecione um aluno para extrair o prontuário completo:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist())
+        if aluno_sel != "-- Escolha um Aluno --":
             ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
             st.markdown(f"## Ficha de: {aluno_sel}")
             st.markdown("---")
@@ -332,7 +297,6 @@ elif menu == "👤 Perfil":
                 st.markdown(f"⚡ **Status:** {ficha.get('Status', 'N/D')}")
             
             st.markdown(f"📍 **Endereço Completo:** {ficha.get('Endereco', 'N/D')}")
-            
             st.markdown("---")
             col_q, col_c = st.columns(2)
             with col_q:
@@ -342,18 +306,119 @@ elif menu == "👤 Perfil":
                 st.subheader("🛠️ Conduta Clínica-Desportiva & Evolução")
                 st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
 
-# --- 7. TELA: CADASTRO COM TRAVA DE CAPACIDADE (3 ALUNOS MAX) ---
+    # ==========================================
+    # REINSERÇÃO DOS GRÁFICOS ANALÍTICOS GERAIS
+    # ==========================================
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("## 📊 Painel Demográfico e Indicadores Estruturais (Base Ativa)")
+    
+    if not df_ativos.empty:
+        g_col1, g_col2 = st.columns(2)
+        
+        # (a) Gráfico de Pizza: Distribuição de Gênero
+        with g_col1:
+            st.markdown("### Distribution por Gênero")
+            if "Genero" in df_ativos.columns:
+                df_gen = df_ativos["Genero"].value_counts().reset_index()
+                df_gen.columns = ["Gênero", "Quantidade"]
+                fig_pizza = px.pie(df_gen, names="Gênero", values="Quantidade", hole=0.3,
+                                   color_discrete_sequence=px.colors.qualitative.Pastel)
+                st.plotly_chart(fig_pizza, use_container_width=True)
+            else:
+                st.info("Dados de Gênero indisponíveis.")
+
+        # (b) Gráfico de Barras: Distribuição por Faixa Etária
+        with g_col2:
+            st.markdown("### Faixa Etária dos Alunos")
+            if "Nascimento" in df_ativos.columns:
+                idades = []
+                ano_atual = datetime.now().year
+                for nasc in df_ativos["Nascimento"]:
+                    try:
+                        ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
+                        idades.append(ano_atual - ano_nasc)
+                    except:
+                        continue
+                
+                if idades:
+                    df_idades = pd.DataFrame({"Idade": idades})
+                    bins = [0, 25, 35, 45, 55, 120]
+                    labels = ["Até 25 anos", "26 a 35 anos", "36 a 45 anos", "46 a 55 anos", "Mais de 55 anos"]
+                    df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
+                    df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
+                    df_faixas.columns = ["Faixa Etária", "Alunos"]
+                    
+                    fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos",
+                                        color_discrete_sequence=["#2E5A44"])
+                    st.plotly_chart(fig_idades, use_container_width=True)
+                else:
+                    st.info("Nenhuma data de nascimento válida registrada.")
+            else:
+                st.info("Dados de Nascimento indisponíveis.")
+
+        st.markdown("---")
+        g_col3, g_col4 = st.columns(2)
+
+        # (c) Gráfico de Barras: Valores a Receber ao Longo dos 31 Dias do Mês
+        with g_col3:
+            st.markdown("### Previsão Diária de Recebimento (Fluxo do Mês)")
+            if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
+                df_fin_rec = df_ativos.copy()
+                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor"].astype(str).str.replace("R$", "", regex=False)
+                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor_Limpo"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+                df_fin_rec["Valor_Num"] = pd.to_numeric(df_fin_rec["Valor_Limpo"], errors="coerce").fillna(0)
+                
+                df_fin_rec["Dia_Venc"] = pd.to_numeric(df_fin_rec["Vencimento"], errors="coerce").fillna(10).astype(int)
+                
+                # Agrupa por dia do mês (1 a 31)
+                fluxo_mensal = df_fin_rec.groupby("Dia_Venc")["Valor_Num"].sum().reset_index()
+                # Cria a estrutura completa de 31 dias para o gráfico ficar bonito
+                estrutura_mes = pd.DataFrame({"Dia_Venc": list(range(1, 32))})
+                fluxo_completo = pd.merge(estrutura_mes, fluxo_mensal, on="Dia_Venc", how="left").fillna(0)
+                fluxo_completo.columns = ["Dia do Vencimento", "Total a Receber (R$)"]
+                
+                fig_fluxo = px.bar(fluxo_completo, x="Dia do Vencimento", y="Total a Receber (R$)",
+                                   color_discrete_sequence=["#FFD700"])
+                fig_fluxo.update_layout(xaxis=dict(tickmode='linear', tick0=1, dtick=2))
+                st.plotly_chart(fig_fluxo, use_container_width=True)
+            else:
+                st.info("Dados financeiros incompletos para geração de fluxo de caixa.")
+
+        # (d) Gráfico de Barras: Principais Queixas dos Alunos Tratados
+        with g_col4:
+            st.markdown("### Mapeamento de Queixas Clínicas")
+            if "Queixa" in df_ativos.columns:
+                todas_queixas = []
+                for q_linha in df_ativos["Queixa"]:
+                    if q_linha and q_linha != "Sem queixas registradas":
+                        # Separa as queixas caso estejam agrupadas por pipe '|'
+                        partes = [p.strip() for p in str(q_linha).split("|") if p.strip()]
+                        todas_queixas.extend(partes)
+                
+                if todas_queixas:
+                    df_q_cont = pd.Series(todas_queixas).value_counts().reset_index()
+                    df_q_cont.columns = ["Queixa Clínica", "Ocorrências"]
+                    fig_queixas = px.bar(df_q_cont.head(8), x="Ocorrências", y="Queixa Clínica", orientation='h',
+                                         color_discrete_sequence=["#A2B9AF"])
+                    fig_queixas.update_layout(yaxis={'categoryorder':'total ascending'})
+                    st.plotly_chart(fig_queixas, use_container_width=True)
+                else:
+                    st.info("Nenhuma patologia/queixa marcada na ficha dos alunos ativos atuais.")
+            else:
+                st.info("Coluna de Queixas indisponível.")
+    else:
+        st.info("Cadastre alunos ativos para popular os indicadores visuais.")
+
+# --- 7. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
-    st.markdown("Selecione as opções clínicas correspondentes para gerar automaticamente a linha de dados formatada para o Google Sheets.")
-    
-    # Campo de monitoramento fora do formulário para permitir atualização dinâmica em tempo real
     st.subheader("📌 Planejamento de Dias e Horários (Verificação de Vagas)")
     col_dias, col_hora = st.columns(2)
     with col_dias:
-        dias_c = st.text_input("Dias de Aula Desejados (Ex: Ter/Qui ou Seg/Qua/Sex):")
+        dias_c = st.text_input("Dias de Aula Desejados (Ex: Ter/Qui):")
     with col_hora:
-        horario_c = st.text_input("Horário Escolhido (Ex: 08:30 ou 19:00):")
+        horario_c = st.text_input("Horário Escolhido (Ex: 08:30):")
         
     bloqueio_cadastro = False
     if dias_c and horario_c:
@@ -361,26 +426,20 @@ elif menu == "📝 Cadastro":
         if conflitos:
             bloqueio_cadastro = True
             for dia_lotado, qtd in conflitos:
-                st.error(f"🛑 **IMPOSSÍVEL SELECIONAR:** O dia da semana **{dia_lotado}** às **{horario_c}** já está com a capacidade máxima esgotada ({qtd}/3 alunos ativos).")
-            st.warning(f"Alunos ocupando este horário atualmente: {', '.join(alunos_existentes)}")
+                st.error(f"🛑 **IMPOSSÍVEL SELECIONAR:** O dia **{dia_lotado}** às **{horario_c}** já está lotado ({qtd}/3 alunos ativos).")
+            st.warning(f"Alunos no horário: {', '.join(alunos_existentes)}")
         else:
-            st.success(f"✅ Horário disponível! Menos de 3 alunos ativos agendados para {dias_c} às {horario_c}.")
+            st.success(f"✅ Horário disponível para {dias_c} às {horario_c}.")
 
     with st.form("form_novo_aluno_anamnese_avancada"):
         st.subheader("1. Dados Pessoais e de Contrato")
         nome_c = st.text_input("Nome Completo:")
-        
         col_id1, col_id2 = st.columns(2)
-        with col_id1:
-            tel_c = st.text_input("WhatsApp com DDD (Ex: 11999998888):")
-        with col_id2:
-            cpf_c = st.text_input("CPF (Ex: 000.000.000-00):")
-            
+        with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
+        with col_id2: cpf_c = st.text_input("CPF:")
         col_end1, col_end2 = st.columns([1, 2])
-        with col_end1:
-            bairro_c = st.text_input("Bairro de Residência:")
-        with col_end2:
-            endereco_c = st.text_input("Endereço Completo (Rua, Número, Complemento):")
+        with col_end1: bairro_c = st.text_input("Bairro:")
+        with col_end2: endereco_c = st.text_input("Endereço Completo:")
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -391,7 +450,7 @@ elif menu == "📝 Cadastro":
             valor_c = st.text_input("Valor Combinado (R$):", value="220,00")
         with col3:
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
-            inicio_c = st.text_input("Data de Início das Aulas (DD/MM/AAAA):", value=datetime.now().strftime("%d/%m/%Y"))
+            inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
         st.subheader("2. Anamnese: Queixas Principais e Sintomas")
         col_q1, col_q2, col_q3 = st.columns(3)
@@ -399,41 +458,18 @@ elif menu == "📝 Cadastro":
             q_lombar = st.checkbox("Dor Lombar (Lombalgia)")
             q_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
             q_hernia = st.checkbox("Hérnia de Disco / Protrusão")
-            q_escoliose = st.checkbox("Escoliose / Desvios Posturais")
         with col_q2:
             q_joelho = st.checkbox("Dor / Lesão nos Joelhos")
             q_ombro = st.checkbox("Dor / Lesão nos Ombros")
-            q_quadril = st.checkbox("Desconforto / Lesão no Quadril")
-            q_artrose = st.checkbox("Artrose / Artrite / Osteopenia")
         with col_q3:
             q_postura = st.checkbox("Melhoria Postural Operacional")
             q_flexi = st.checkbox("Ganho de Flexibilidade / Mobilidade")
-            stretching = st.checkbox("Condicionamento / Tonificação Muscular")
-            q_estresse = st.checkbox("Alívio de Estresse / Bem-Estar")
             
-        queixa_extra = st.text_input("Outras Queixas / Histórico Clínico Adicional:")
+        queixa_extra = st.text_input("Outras Queixas Adicionais:")
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
+        progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
-        st.subheader("3. Conduta Clínica-Desportiva e Tratamento")
-        col_cond1, col_cond2, col_cond3 = st.columns(3)
-        with col_cond1:
-            c_fortalece = st.checkbox("Fortalecimento de Core / Powerhouse")
-            c_reab = st.checkbox("Reabilitação / Estabilização Segmentar")
-            c_alonga = st.checkbox("Alongamento Axial / Descompressão")
-        with col_cond2:
-            c_mobilidade = st.checkbox("Treino de Mobilidade Articular Completa")
-            c_postural = st.checkbox("Correção Postural Dinâmica")
-            c_respiracao = st.checkbox("Controle Respiratório e Ativação")
-        with col_cond3:
-            c_restricao = st.checkbox("Restrição de Carga / Movimentos Flexo-Torção")
-            c_adaptado = st.checkbox("Exercícios Adaptados para Patologias")
-            c_geral = st.checkbox("Pilates Clínico Geral / Manutenção")
-            
-        conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações Técnicas:")
-        progresso_c = st.text_area("Evolução / Histórico de Progressos do Aluno:", placeholder="Registre aqui a evolução...")
-
-        # Trava o botão final se estiver lotado
         if bloqueio_cadastro:
-            st.error("⚠️ O botão de cadastro está desativado porque o horário/dia escolhido acima está lotado.")
             st.form_submit_button("Cadastro Bloqueado devido à Lotação", disabled=True)
         else:
             if st.form_submit_button("Validar e Gerar Linha de Cadastro"):
@@ -442,55 +478,28 @@ elif menu == "📝 Cadastro":
                     if q_lombar: lista_queixas.append("Dor Lombar")
                     if q_cervical: lista_queixas.append("Dor Cervical")
                     if q_hernia: lista_queixas.append("Hérnia de Disco")
-                    if q_escoliose: lista_queixas.append("Escoliose")
                     if q_joelho: lista_queixas.append("Lesão Joelho")
                     if q_ombro: lista_queixas.append("Lesão Ombro")
-                    if q_quadril: lista_queixas.append("Desconforto Quadril")
-                    if q_artrose: lista_queixas.append("Artrose/Artrite")
                     if q_postura: lista_queixas.append("Melhoria Postural")
                     if q_flexi: lista_queixas.append("Ganho Flexibilidade")
-                    if stretching: lista_queixas.append("Tonificação")
-                    if q_estresse: lista_queixas.append("Alívio Estresse")
                     if queixa_extra: lista_queixas.append(queixa_extra)
                     string_queixas = " | ".join(lista_queixas) if lista_queixas else "Sem queixas registradas"
 
-                    lista_condutas = []
-                    if c_fortalece: lista_condutas.append("Fortalecimento de Core")
-                    if c_reab: lista_condutas.append("Reabilitação")
-                    if c_alonga: lista_condutas.append("Alongamento Axial")
-                    if c_mobilidade: lista_condutas.append("Treino Mobilidade")
-                    if c_postural: lista_condutas.append("Correção Postural")
-                    if c_respiracao: lista_condutas.append("Controle Respiratório")
-                    if c_restricao: lista_condutas.append("Restrição Carga/Torção")
-                    if c_adaptado: lista_condutas.append("Exercícios Adaptados")
-                    if c_geral: lista_condutas.append("Pilates Clínico Geral")
-                    if conduta_extra: lista_condutas.append(conduta_extra)
-                    if progresso_c: lista_condutas.append(f"[PROGRESSO: {progresso_c}]")
-                    string_condutas = " | ".join(lista_condutas) if lista_condutas else "Conduta padrão"
-
-                    st.success("🎉 Linha estruturada gerada! Copie e cole na aba 'Alunos':")
-                    linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
+                    st.success("🎉 Linha estruturada gerada!")
+                    linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{conduta_extra}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
                     st.code(linha_csv, language="text")
-                else:
-                    st.error("Erro: Os campos 'Nome' e 'WhatsApp' são obrigatórios.")
 
 # --- 8. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Relatório e Movimentação Financeira")
     if "Valor" in df_financeiro.columns:
-        valores_limpos = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False)
-        valores_limpos = valores_limpos.str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+        valores_limpos = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
         valores_numericos = pd.to_numeric(valores_limpos, errors="coerce")
-        faturamento_total = valores_numericos.sum()
-        valor_formatado = f"R$ {faturamento_total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-        st.metric(label="Faturamento Total Acumulado", value=valor_formatado)
+        st.metric(label="Faturamento Total Acumulado", value=f"R$ {valores_numericos.sum():,.2f}")
     st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
 
 # --- 9. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela de Preços e Models de Planos")
-    dados_precos_oficiais = {
-        "Frequência Semanal": ["1x na semana", "2x na semana", "3x na semana"],
-        "Valor Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"]
-    }
+    st.title("⚙️ Tabela de Preços e Modelos de Planos")
+    dados_precos_oficiais = {"Frequência Semanal": ["1x na semana", "2x na semana", "3x na semana"], "Valor Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"]}
     st.table(pd.DataFrame(dados_precos_oficiais))
