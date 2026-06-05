@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import os
 
 # ==========================================
 # 1. CONFIGURAÇÃO DE IDENTIDADE VISUAL (CSS)
@@ -110,10 +111,16 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - MENU VERTICAL REORDENADO
+# 3. BARRA LATERAL - LOGO E MENU ORDENADO
 # ==========================================
 with st.sidebar:
-    st.markdown("## 🏋️‍♂️ Studio Highline")
+    # Tentativa de carregar a imagem do logo localmente
+    nome_logo = "Highline Logo.png"
+    if os.path.exists(nome_logo):
+        st.image(nome_logo, use_container_width=True)
+    else:
+        st.markdown("## 🏋️‍♂️ Studio Highline")
+        
     st.markdown("🔒 **Menu de Navegação**")
     
     menu = st.radio(
@@ -229,7 +236,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário Escolhido (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
             bloqueio_edicao = False
-            if novos_dias and Clinical and novo_horario:
+            if novos_dias and novo_horario:
                 conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -249,7 +256,7 @@ elif menu == "👥 Alunos":
                 
             if btn_inativar_alt:
                 st.warning(f"Linha de desativação gerada para {aluno_para_editar}. Substitua a linha dele na planilha por esta para movê-lo ao Arquivo Morto:")
-                linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_atuais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
+                linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_aurais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
                 st.code(linha_inativo_csv, language="text")
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
