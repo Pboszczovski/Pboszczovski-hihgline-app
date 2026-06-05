@@ -7,7 +7,7 @@ from datetime import datetime
 # ==========================================
 st.set_page_config(page_title="Highline Management", layout="wide", page_icon="🏋️‍♂️")
 
-# Mantém a barra lateral com o verde-escuro original da foto do seu app
+# Mantém a barra lateral com o verde-escuro original da marca
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {
@@ -130,7 +130,7 @@ if menu == "📅 Agenda":
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
-# --- 2. TELA: ALUNOS ---
+# --- 2. TELA: ALUNOS (LAYOUT CORRIGIDO PARA LARGURA TOTAL) ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
     
@@ -141,54 +141,61 @@ elif menu == "👥 Alunos":
 
     st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
     
-    col_busca, col_edit = st.columns([2, 1])
-    with col_busca:
-        busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo ou parcial...")
-        if busca and "Nome" in df_ativos.columns:
-            df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
-        else:
-            df_ativos_tabela = df_ativos
-        
-        st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
+    busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo ou parcial...")
+    if busca and "Nome" in df_ativos.columns:
+        df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
+    else:
+        df_ativos_tabela = df_ativos
+    
+    st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
 
-    with col_edit:
-        st.markdown("### ✏️ Alteração Rápida de Dados")
-        if "Nome" in df_ativos.columns and not df_ativos.empty:
-            aluno_para_editar = st.selectbox("Selecione para gerenciar:", ["-- Escolha um Aluno --"] + df_ativos["Nome"].tolist())
+    st.markdown("---")
+    
+    # Área de Gerenciamento reposicionada abaixo da tabela ocupando largura completa
+    st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
+    
+    if "Nome" in df_ativos.columns and not df_ativos.empty:
+        aluno_para_editar = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", ["-- Escolha um Aluno --"] + df_ativos["Nome"].tolist())
+        
+        if aluno_para_editar != "-- Escolha um Aluno --":
+            dados_atuais = df_ativos[df_ativos["Nome"] == aluno_para_editar].iloc[0]
             
-            if aluno_para_editar != "-- Escolha um Aluno --":
-                dados_atuais = df_ativos[df_ativos["Nome"] == aluno_para_editar].iloc[0]
-                
+            # Organização dos campos de edição em colunas horizontais limpas
+            c_ed1, c_ed2, c_ed3 = st.columns(3)
+            
+            with c_ed1:
                 lista_planos = ["1x semana", "2x semana", "3x semana", "Outro"]
                 plano_atual = dados_atuais.get("Plano", "1x semana")
                 idx_plano = lista_planos.index(plano_atual) if plano_atual in lista_planos else 0
-                
                 novo_plano = st.selectbox("Novo Plano Contratado:", lista_planos, index=idx_plano)
-                novos_dias = st.text_input("Novos Dias de Aula Fixados:", value=dados_atuais.get("Dias", ""))
-                novo_horario = st.text_input("Novo Horário Escolhido:", value=dados_atuais.get("Horario", ""))
                 
                 valor_sugerido = dados_atuais.get("Valor", "220,00")
                 if novo_plano == "1x semana": valor_sugerido = "180,00"
                 elif novo_plano == "2x semana": valor_sugerido = "220,00"
                 elif novo_plano == "3x semana": valor_sugerido = "300,00"
-                
                 novo_valor = st.text_input("Confirmar Valor Mensal (R$):", value=valor_sugerido)
                 
-                if st.button("Gerar Atualização de Cadastro"):
-                    st.success(f"Dados prontos! Substitua a linha antiga de {aluno_para_editar} na planilha por esta:")
-                    linha_atualizada_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{novo_plano}","{novo_valor}",{dados_atuais.get("Vencimento",10)},"{novos_dias}","{novo_horario}","Ativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
-                    st.code(linha_atualizada_csv, language="text")
+            with c_ed2:
+                novos_dias = st.text_input("Novos Dias de Aula Fixados:", value=dados_atuais.get("Dias", ""))
+                novo_horario = st.text_input("Novo Horário Escolhido:", value=dados_atuais.get("Horario", ""))
                 
-                st.markdown("---")
-                st.markdown("### ❌ Desativação (Arquivo Morto)")
-                st.write("Se o aluno deixou de fazer as aulas, gere a linha de inativação abaixo:")
+            with c_ed3:
+                st.markdown("**Ações Disponíveis:**")
+                btn_salvar_alt = st.button("💾 Gerar Linha Atualizada")
+                btn_inativar_alt = st.button("❌ Inativar (Mover para Arquivo Morto)")
+            
+            # Trata o feedback dos botões logo abaixo
+            if btn_salvar_alt:
+                st.success(f"Dados prontos! Substitua a linha antiga de {aluno_para_editar} na planilha por esta:")
+                linha_atualizada_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{novo_plano}","{novo_valor}",{dados_atuais.get("Vencimento",10)},"{novos_dias}","{novo_horario}","Ativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
+                st.code(linha_atualizada_csv, language="text")
                 
-                if st.button("Gerar Linha de Inativação", key="btn_inativar"):
-                    st.warning(f"Linha de desativação gerada para {aluno_para_editar}. Substitua a linha dele na planilha por esta para movê-lo ao Arquivo Morto:")
-                    linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_atuais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
-                    st.code(linha_inativo_csv, language="text")
-        else:
-            st.info("Nenhum aluno ativo disponível para gerenciamento.")
+            if btn_inativar_alt:
+                st.warning(f"Linha de desativação gerada para {aluno_para_editar}. Substitua a linha dele na planilha por esta para movê-lo ao Arquivo Morto:")
+                linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_atuais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
+                st.code(linha_inativo_csv, language="text")
+    else:
+        st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
 # --- 3. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
@@ -200,12 +207,11 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("A coluna 'Status' não foi localizada.")
 
-# --- 4. TELA: ESPERA (LAYOUT EM LARGURA TOTAL CORRIGIDO) ---
+# --- 4. TELA: ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Lista de Espera")
     st.metric("Total de Clientes em Espera", len(df_espera))
     
-    # Busca e Tabela ocupando a largura total inicial
     busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
     df_espera_tabela = df_espera.copy()
     if busca_espera and not df_espera.empty:
@@ -215,8 +221,6 @@ elif menu == "⏳ Espera":
     st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    
-    # Formulário reposicionado logo abaixo em largura completa e organizado em colunas
     st.markdown("### ➕ Registrar na Lista de Espera")
     st.write("Insira os dados do potencial aluno para gerar a nova linha formatada para a sua planilha:")
     
