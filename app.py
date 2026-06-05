@@ -110,7 +110,7 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - MENU VERTICAL ORIGINAL ATUALIZADO
+# 3. BARRA LATERAL - MENU VERTICAL REORDENADO
 # ==========================================
 with st.sidebar:
     st.markdown("## 🏋️‍♂️ Studio Highline")
@@ -121,14 +121,14 @@ with st.sidebar:
         [
             "📅 Agenda",
             "👥 Alunos",
-            "📁 Arquivo Morto",
-            "⏳ Espera",
-            "🗺️ Mapa",
-            "👤 Perfil",
-            "🖨️ Imprimir Prontuário",  # Novo item adicionado aqui
             "📝 Cadastro",
+            "⏳ Espera",
             "💰 Financeiro",
-            "⚙️ Preços"
+            "👤 Perfil",
+            "🗺️ Mapa",
+            "⚙️ Preços",
+            "📁 Arquivo Morto",
+            "🖨️ Imprimir Prontuário"
         ]
     )
     
@@ -229,7 +229,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário Escolhido (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
             bloqueio_edicao = False
-            if novos_dias and novo_horario:
+            if novos_dias and Clinical and novo_horario:
                 conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -254,223 +254,7 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: ARQUIVO MORTO ---
-elif menu == "📁 Arquivo Morto":
-    st.title("📁 Arquivo Morto")
-    if "Status" in df_alunos.columns:
-        df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() != "ATIVO"]
-        st.metric("Total de Alunos no Arquivo Morto", len(df_inativos))
-        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
-
-# --- 4. TELA: ESPERA ---
-elif menu == "⏳ Espera":
-    st.title("⏳ Lista de Espera")
-    st.metric("Total de Clientes em Espera", len(df_espera))
-    busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
-    df_espera_tabela = df_espera.copy()
-    if busca_espera and not df_espera.empty:
-        col_nome_esp = df_espera.columns[0]
-        df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
-    st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
-
-# --- 5. TELA: MAPA ---
-elif menu == "🗺️ Mapa":
-    st.title("🗺️ Mapa de Distribuição Geográfica")
-    if "Bairro" in df_alunos.columns:
-        df_bairros = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
-        contagem = df_bairros["Bairro"].value_counts().reset_index()
-        contagem.columns = ["Bairro", "Quantidade de Alunos"]
-        st.bar_chart(data=contagem, x="Bairro", y="Quantidade de Alunos")
-
-# --- 6. TELA: PERFIL (DASHBOARD GERAL DE INDICÁDORES DA BASE ATIVA) ---
-elif menu == "👤 Perfil":
-    st.title("👤 Indicadores Estruturais da Base Ativa")
-    
-    if "Status" in df_alunos.columns:
-        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-    else:
-        df_ativos = df_alunos.copy()
-
-    # ==========================================
-    # PAINEL DE GRÁFICOS ANALÍTICOS GERAIS
-    # ==========================================
-    if not df_ativos.empty:
-        g_col1, g_col2 = st.columns(2)
-        
-        # (a) Gráfico de Pizza: Distribuição de Gênero
-        with g_col1:
-            st.markdown("### Distribuição por Gênero")
-            if "Genero" in df_ativos.columns:
-                df_gen = df_ativos["Genero"].value_counts().reset_index()
-                df_gen.columns = ["Gênero", "Quantidade"]
-                fig_pizza = px.pie(df_gen, names="Gênero", values="Quantidade", hole=0.3,
-                                   color_discrete_sequence=px.colors.qualitative.Pastel)
-                st.plotly_chart(fig_pizza, use_container_width=True)
-            else:
-                st.info("Dados de Gênero indisponíveis.")
-
-        # (b) Gráfico de Barras: Distribuição por Faixa Etária
-        with g_col2:
-            st.markdown("### Faixa Etária dos Alunos")
-            if "Nascimento" in df_ativos.columns:
-                idades = []
-                ano_atual = datetime.now().year
-                for nasc in df_ativos["Nascimento"]:
-                    try:
-                        ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
-                        idades.append(ano_atual - ano_nasc)
-                    except:
-                        continue
-                
-                if idades:
-                    df_idades = pd.DataFrame({"Idade": idades})
-                    bins = [0, 25, 35, 45, 55, 120]
-                    labels = ["Até 25 anos", "26 a 35 anos", "36 a 45 anos", "46 a 55 anos", "Mais de 55 anos"]
-                    df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
-                    df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
-                    df_faixas.columns = ["Faixa Etária", "Alunos"]
-                    
-                    fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos",
-                                        color_discrete_sequence=["#2E5A44"])
-                    st.plotly_chart(fig_idades, use_container_width=True)
-                else:
-                    st.info("Nenhuma data de nascimento válida registrada.")
-            else:
-                st.info("Dados de Nascimento indisponíveis.")
-
-        st.markdown("---")
-        g_col3, g_col4 = st.columns(2)
-
-        # (c) Gráfico de Barras: Valores a Receber ao Longo dos 31 Dias do Mês
-        with g_col3:
-            st.markdown("### Previsão Diária de Recebimento (Fluxo do Mês)")
-            if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
-                df_fin_rec = df_ativos.copy()
-                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor"].astype(str).str.replace("R$", "", regex=False)
-                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor_Limpo"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
-                df_fin_rec["Valor_Num"] = pd.to_numeric(df_fin_rec["Valor_Limpo"], errors="coerce").fillna(0)
-                
-                df_fin_rec["Dia_Venc"] = pd.to_numeric(df_fin_rec["Vencimento"], errors="coerce").fillna(10).astype(int)
-                
-                fluxo_mensal = df_fin_rec.groupby("Dia_Venc")["Valor_Num"].sum().reset_index()
-                estrutura_mes = pd.DataFrame({"Dia_Venc": list(range(1, 32))})
-                fluxo_completo = pd.merge(estrutura_mes, fluxo_mensal, on="Dia_Venc", how="left").fillna(0)
-                fluxo_completo.columns = ["Dia do Vencimento", "Total a Receber (R$)"]
-                
-                fig_fluxo = px.bar(fluxo_completo, x="Dia do Vencimento", y="Total a Receber (R$)",
-                                   color_discrete_sequence=["#FFD700"])
-                fig_fluxo.update_layout(xaxis=dict(tickmode='linear', tick0=1, dtick=2))
-                st.plotly_chart(fig_fluxo, use_container_width=True)
-            else:
-                st.info("Dados financeiros incompletos para geração de fluxo de caixa.")
-
-        # (d) Gráfico de Barras: Principais Queixas dos Alunos Tratados
-        with g_col4:
-            st.markdown("### Mapeamento de Queixas Clínicas")
-            if "Queixa" in df_ativos.columns:
-                todas_queixas = []
-                for q_linha in df_ativos["Queixa"]:
-                    if q_linha and q_linha != "Sem queixas registradas":
-                        partes = [p.strip() for p in str(q_linha).split("|") if p.strip()]
-                        todas_queixas.extend(partes)
-                
-                if todas_queixas:
-                    df_q_cont = pd.Series(todas_queixas).value_counts().reset_index()
-                    df_q_cont.columns = ["Queixa Clínica", "Ocorrências"]
-                    fig_queixas = px.bar(df_q_cont.head(8), x="Ocorrências", y="Queixa Clínica", orientation='h',
-                                         color_discrete_sequence=["#A2B9AF"])
-                    fig_queixas.update_layout(yaxis={'categoryorder':'total ascending'})
-                    st.plotly_chart(fig_queixas, use_container_width=True)
-                else:
-                    st.info("Nenhuma patologia/queixa marcada na ficha dos alunos ativos atuais.")
-            else:
-                st.info("Coluna de Queixas indisponível.")
-    else:
-        st.info("Cadastre alunos ativos para popular os indicadores visuais.")
-
-# --- TELA NOVA: 🖨️ IMPRIMIR PRONTUÁRIO ---
-elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Impressão de Prontuário de Aluno")
-    
-    if "Nome" in df_alunos.columns:
-        aluno_sel = st.selectbox("Selecione o aluno para gerar a folha de prontuário:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist(), key="print_select")
-        
-        if aluno_sel != "-- Escolha um Aluno --":
-            ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
-            
-            # Botão visível na web para disparar a janela de impressão do navegador
-            st.markdown('<div class="no-print">', unsafe_allow_html=True)
-            if st.button("🖨️ Abrir Janela de Impressão / Salvar PDF"):
-                st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Container estruturado para a folha de impressão
-            st.markdown(f"""
-            <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
-                <div style="text-align: center; margin-bottom: 25px;">
-                    <h1 style="color: #2E5A44; margin: 0; font-size: 28px;">STUDIO HIGHLINE</h1>
-                    <p style="margin: 5px 0; font-size: 14px; letter-spacing: 2px; color: #555;">PRONTUÁRIO DE ACOMPANHAMENTO INDIVIDUAL</p>
-                    <hr style="border: 0; border-top: 2px solid #2E5A44; margin-top: 15px;">
-                </div>
-                
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">1. DADOS PESSOAIS</h3>
-                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
-                    <tr>
-                        <td style="padding: 8px 0; width: 60%;"><strong>Nome Completo:</strong> {aluno_sel}</td>
-                        <td style="padding: 8px 0;"><strong>Gênero:</strong> {ficha.get('Genero', 'N/D')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0;"><strong>Data de Nascimento:</strong> {ficha.get('Nascimento', 'N/D')}</td>
-                        <td style="padding: 8px 0;"><strong>CPF:</strong> {ficha.get('CPF', 'N/D')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0;"><strong>Telefone/WhatsApp:</strong> {ficha.get('Telefone', 'N/D')}</td>
-                        <td style="padding: 8px 0;"><strong>Bairro:</strong> {ficha.get('Bairro', 'N/D')}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2" style="padding: 8px 0;"><strong>Endereço Completo:</strong> {ficha.get('Endereco', 'N/D')}</td>
-                    </tr>
-                </table>
-
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">2. DADOS CONTRATUAIS</h3>
-                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
-                    <tr>
-                        <td style="padding: 8px 0; width: 33%;"><strong>Plano:</strong> {ficha.get('Plano', 'N/D')}</td>
-                        <td style="padding: 8px 0; width: 33%;"><strong>Valor Contratado:</strong> {ficha.get('Valor', 'N/D')}</td>
-                        <td style="padding: 8px 0;"><strong>Dia Vencimento:</strong> Dia {ficha.get('Vencimento', 'N/D')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px 0;"><strong>Dias Fixados:</strong> {ficha.get('Dias', 'N/D')}</td>
-                        <td style="padding: 8px 0;"><strong>Horário Oficial:</strong> {ficha.get('Horario', 'N/D')}</td>
-                        <td style="padding: 8px 0;"><strong>Início das Aulas:</strong> {ficha.get('Inicio_Aulas', 'N/D')}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="3" style="padding: 8px 0;"><strong>Status da Matrícula:</strong> {ficha.get('Status', 'N/D')}</td>
-                    </tr>
-                </table>
-
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">3. ANAMNESE / QUEIXA PRINCIPAL</h3>
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #2E5A44; line-height: 1.5; min-height: 80px; margin-top: 10px; color: #333;">
-                    {ficha.get('Queixa', 'Nenhum registro adicionado.')}
-                </div>
-
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">4. DIRETRIZES DE CONDUTA & EVOLUÇÃO</h3>
-                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #FFD700; line-height: 1.5; min-height: 120px; margin-top: 10px; color: #333;">
-                    {ficha.get('Conduta', 'Nenhuma conduta desenhada.')}
-                </div>
-                
-                <div style="margin-top: 70px; text-align: center; font-size: 13px; color: #777;">
-                    <p>____________________________________________________</p>
-                    <p>Assinatura do Responsável Técnico / Avaliador</p>
-                    <p style="font-size: 11px; margin-top: 15px;">Documento gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")} via Highline Management.</p>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-    else:
-        st.info("Nenhum dado encontrado para gerar prontuários.")
-
-# --- 7. TELA: CADASTRO ---
+# --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     st.subheader("📌 Planejamento de Dias e Horários (Verificação de Vagas)")
@@ -549,7 +333,18 @@ elif menu == "📝 Cadastro":
                     linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{conduta_extra}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
                     st.code(linha_csv, language="text")
 
-# --- 8. TELA: FINANCEIRO ---
+# --- 4. TELA: ESPERA ---
+elif menu == "⏳ Espera":
+    st.title("⏳ Lista de Espera")
+    st.metric("Total de Clientes em Espera", len(df_espera))
+    busca_espera = st.text_input("🔍 Filtrar lista de espera por nome:", placeholder="Digite para filtrar...")
+    df_espera_tabela = df_espera.copy()
+    if busca_espera and not df_espera.empty:
+        col_nome_esp = df_espera.columns[0]
+        df_espera_tabela = df_espera[df_espera[col_nome_esp].astype(str).str.contains(busca_espera, case=False, na=False)]
+    st.dataframe(df_espera_tabela, use_container_width=True, hide_index=True)
+
+# --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Relatório e Movimentação Financeira")
     if "Valor" in df_financeiro.columns:
@@ -558,8 +353,204 @@ elif menu == "💰 Financeiro":
         st.metric(label="Faturamento Total Acumulado", value=f"R$ {valores_numericos.sum():,.2f}")
     st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
 
-# --- 9. TELA: PREÇOS ---
+# --- 6. TELA: PERFIL ---
+elif menu == "👤 Perfil":
+    st.title("👤 Indicadores Estruturais da Base Ativa")
+    
+    if "Status" in df_alunos.columns:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
+    else:
+        df_ativos = df_alunos.copy()
+
+    if not df_ativos.empty:
+        g_col1, g_col2 = st.columns(2)
+        
+        with g_col1:
+            st.markdown("### Distribuição por Gênero")
+            if "Genero" in df_ativos.columns:
+                df_gen = df_ativos["Genero"].value_counts().reset_index()
+                df_gen.columns = ["Gênero", "Quantidade"]
+                fig_pizza = px.pie(df_gen, names="Gênero", values="Quantidade", hole=0.3,
+                                   color_discrete_sequence=px.colors.qualitative.Pastel)
+                st.plotly_chart(fig_pizza, use_container_width=True)
+            else:
+                st.info("Dados de Gênero indisponíveis.")
+
+        with g_col2:
+            st.markdown("### Faixa Etária dos Alunos")
+            if "Nascimento" in df_ativos.columns:
+                idades = []
+                ano_atual = datetime.now().year
+                for nasc in df_ativos["Nascimento"]:
+                    try:
+                        ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
+                        idades.append(ano_atual - ano_nasc)
+                    except:
+                        continue
+                
+                if idades:
+                    df_idades = pd.DataFrame({"Idade": idades})
+                    bins = [0, 25, 35, 45, 55, 120]
+                    labels = ["Até 25 anos", "26 a 35 anos", "36 a 45 anos", "46 a 55 anos", "Mais de 55 anos"]
+                    df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
+                    df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
+                    df_faixas.columns = ["Faixa Etária", "Alunos"]
+                    
+                    fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos",
+                                        color_discrete_sequence=["#2E5A44"])
+                    st.plotly_chart(fig_idades, use_container_width=True)
+                else:
+                    st.info("Nenhuma data de nascimento válida registrada.")
+            else:
+                st.info("Dados de Nascimento indisponíveis.")
+
+        st.markdown("---")
+        g_col3, g_col4 = st.columns(2)
+
+        with g_col3:
+            st.markdown("### Previsão Diária de Recebimento (Fluxo do Mês)")
+            if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
+                df_fin_rec = df_ativos.copy()
+                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor"].astype(str).str.replace("R$", "", regex=False)
+                df_fin_rec["Valor_Limpo"] = df_fin_rec["Valor_Limpo"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+                df_fin_rec["Valor_Num"] = pd.to_numeric(df_fin_rec["Valor_Limpo"], errors="coerce").fillna(0)
+                
+                df_fin_rec["Dia_Venc"] = pd.to_numeric(df_fin_rec["Vencimento"], errors="coerce").fillna(10).astype(int)
+                
+                fluxo_mensal = df_fin_rec.groupby("Dia_Venc")["Valor_Num"].sum().reset_index()
+                estrutura_mes = pd.DataFrame({"Dia_Venc": list(range(1, 32))})
+                fluxo_completo = pd.merge(estrutura_mes, fluxo_mensal, on="Dia_Venc", how="left").fillna(0)
+                fluxo_completo.columns = ["Dia do Vencimento", "Total a Receber (R$)"]
+                
+                fig_fluxo = px.bar(fluxo_completo, x="Dia do Vencimento", y="Total a Receber (R$)",
+                                   color_discrete_sequence=["#FFD700"])
+                fig_fluxo.update_layout(xaxis=dict(tickmode='linear', tick0=1, dtick=2))
+                st.plotly_chart(fig_fluxo, use_container_width=True)
+            else:
+                st.info("Dados financeiros incompletos para geração de fluxo de caixa.")
+
+        with g_col4:
+            st.markdown("### Mapeamento de Queixas Clínicas")
+            if "Queixa" in df_ativos.columns:
+                todas_queixas = []
+                for q_linha in df_ativos["Queixa"]:
+                    if q_linha and q_linha != "Sem queixas registradas":
+                        partes = [p.strip() for p in str(q_linha).split("|") if p.strip()]
+                        todas_queixas.extend(partes)
+                
+                if todas_queixas:
+                    df_q_cont = pd.Series(todas_queixas).value_counts().reset_index()
+                    df_q_cont.columns = ["Queixa Clínica", "Ocorrências"]
+                    fig_queixas = px.bar(df_q_cont.head(8), x="Ocorrências", y="Queixa Clínica", orientation='h',
+                                         color_discrete_sequence=["#A2B9AF"])
+                    fig_queixas.update_layout(yaxis={'categoryorder':'total ascending'})
+                    st.plotly_chart(fig_queixas, use_container_width=True)
+                else:
+                    st.info("Nenhuma patologia/queixa marcada na ficha dos alunos ativos atuais.")
+            else:
+                st.info("Coluna de Queixas indisponível.")
+    else:
+        st.info("Cadastre alunos ativos para popular os indicadores visuais.")
+
+# --- 7. TELA: MAPA ---
+elif menu == "🗺️ Mapa":
+    st.title("🗺️ Mapa de Distribuição Geográfica")
+    if "Bairro" in df_alunos.columns:
+        df_bairros = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+        contagem = df_bairros["Bairro"].value_counts().reset_index()
+        contagem.columns = ["Bairro", "Quantidade de Alunos"]
+        st.bar_chart(data=contagem, x="Bairro", y="Quantidade de Alunos")
+
+# --- 8. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Tabela de Preços e Modelos de Planos")
     dados_precos_oficiais = {"Frequência Semanal": ["1x na semana", "2x na semana", "3x na semana"], "Valor Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"]}
     st.table(pd.DataFrame(dados_precos_oficiais))
+
+# --- 9. TELA: ARQUIVO MORTO ---
+elif menu == "📁 Arquivo Morto":
+    st.title("📁 Arquivo Morto")
+    if "Status" in df_alunos.columns:
+        df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() != "ATIVO"]
+        st.metric("Total de Alunos no Arquivo Morto", len(df_inativos))
+        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
+
+# --- 10. TELA: 🖨️ IMPRIMIR PRONTUÁRIO ---
+elif menu == "🖨️ Imprimir Prontuário":
+    st.title("🖨️ Impressão de Prontuário de Aluno")
+    
+    if "Nome" in df_alunos.columns:
+        aluno_sel = st.selectbox("Selecione o aluno para gerar a folha de prontuário:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist(), key="print_select")
+        
+        if aluno_sel != "-- Escolha um Aluno --":
+            ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
+            
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
+            if st.button("🖨️ Abrir Janela de Impressão / Salvar PDF"):
+                st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.markdown(f"""
+            <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
+                <div style="text-align: center; margin-bottom: 25px;">
+                    <h1 style="color: #2E5A44; margin: 0; font-size: 28px;">STUDIO HIGHLINE</h1>
+                    <p style="margin: 5px 0; font-size: 14px; letter-spacing: 2px; color: #555;">PRONTUÁRIO DE ACOMPANHAMENTO INDIVIDUAL</p>
+                    <hr style="border: 0; border-top: 2px solid #2E5A44; margin-top: 15px;">
+                </div>
+                
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">1. DADOS PESSOAIS</h3>
+                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <td style="padding: 8px 0; width: 60%;"><strong>Nome Completo:</strong> {aluno_sel}</td>
+                        <td style="padding: 8px 0;"><strong>Gênero:</strong> {ficha.get('Genero', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Data de Nascimento:</strong> {ficha.get('Nascimento', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>CPF:</strong> {ficha.get('CPF', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Telefone/WhatsApp:</strong> {ficha.get('Telefone', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Bairro:</strong> {ficha.get('Bairro', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="padding: 8px 0;"><strong>Endereço Completo:</strong> {ficha.get('Endereco', 'N/D')}</td>
+                    </tr>
+                </table>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">2. DADOS CONTRATUAIS</h3>
+                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <td style="padding: 8px 0; width: 33%;"><strong>Plano:</strong> {ficha.get('Plano', 'N/D')}</td>
+                        <td style="padding: 8px 0; width: 33%;"><strong>Valor Contratado:</strong> {ficha.get('Valor', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Dia Vencimento:</strong> Dia {ficha.get('Vencimento', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Dias Fixados:</strong> {ficha.get('Dias', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Horário Oficial:</strong> {ficha.get('Horario', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Início das Aulas:</strong> {ficha.get('Inicio_Aulas', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" style="padding: 8px 0;"><strong>Status da Matrícula:</strong> {ficha.get('Status', 'N/D')}</td>
+                    </tr>
+                </table>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">3. ANAMNESE / QUEIXA PRINCIPAL</h3>
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #2E5A44; line-height: 1.5; min-height: 80px; margin-top: 10px; color: #333;">
+                    {ficha.get('Queixa', 'Nenhum registro adicionado.')}
+                </div>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">4. DIRETRIZES DE CONDUTA & EVOLUÇÃO</h3>
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #FFD700; line-height: 1.5; min-height: 120px; margin-top: 10px; color: #333;">
+                    {ficha.get('Conduta', 'Nenhuma conduta desenhada.')}
+                </div>
+                
+                <div style="margin-top: 70px; text-align: center; font-size: 13px; color: #777;">
+                    <p>____________________________________________________</p>
+                    <p>Assinatura do Responsável Técnico / Avaliador</p>
+                    <p style="font-size: 11px; margin-top: 15px;">Documento gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")} via Highline Management.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    else:
+        st.info("Nenhum dado encontrado para gerar prontuários.")
