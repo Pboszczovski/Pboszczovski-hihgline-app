@@ -200,7 +200,7 @@ elif menu == "👤 Perfil":
                 st.subheader("📋 Queixa Principal / Anamnese")
                 st.info(ficha.get('Queixa', 'Nenhum registro adicionado.'))
             with col_c:
-                st.subheader("🛠️ Conduta Clínica-Desportiva")
+                st.subheader("🛠️ Conduta Clínica-Desportiva & Evolução")
                 st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
 
 # --- 7. TELA: CADASTRO COM ANAMNESE E CAIXA DE PROGRESSOS ---
@@ -219,8 +219,9 @@ elif menu == "📝 Cadastro":
             genero_c = st.selectbox("Gênero:", ["Masculino", "Feminino", "Outro"])
             nasc_c = st.text_input("Data de Nascimento (DD/MM/AAAA):")
         with col2:
-            plano_c = st.selectbox("Plano Contratado:", ["Mensal", "Trimestral", "Semestral", "Anual"])
-            valor_c = st.text_input("Valor Combinado (R$):", value="150,00")
+            # Planos ajustados com base na frequência semanal informada
+            plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana", "Outro"])
+            valor_c = st.text_input("Valor Combinado (R$):", value="220,00")
         with col3:
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início das Aulas (DD/MM/AAAA):", value=datetime.now().strftime("%d/%m/%Y"))
@@ -273,7 +274,6 @@ elif menu == "📝 Cadastro":
             
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações Técnicas:")
         
-        # --- NOVO CAMPO SOLICITADO ---
         st.subheader("5. Evolução e Acompanhamento Clínico")
         progresso_c = st.text_area("Evolução / Histórico de Progressos do Aluno em Relação ao Tratamento:", placeholder="Registre aqui a evolução das dores, ganho de mobilidade, respostas aos exercícios e relatos de melhora do aluno ao longo do tempo...")
 
@@ -296,7 +296,7 @@ elif menu == "📝 Cadastro":
                 if queixa_extra: lista_queixas.append(queixa_extra)
                 string_queixas = " | ".join(lista_queixas) if lista_queixas else "Sem queixas registradas"
 
-                # Processa a string de condutas e funde com as notas de progresso
+                # Processa a string de condutas e progressos
                 lista_condutas = []
                 if c_fortalece: lista_condutas.append("Fortalecimento de Core")
                 if c_reab: lista_condutas.append("Reabilitação")
@@ -309,14 +309,12 @@ elif menu == "📝 Cadastro":
                 if c_geral: lista_condutas.append("Pilates Clínico Geral")
                 if conduta_extra: lista_condutas.append(conduta_extra)
                 
-                # Se houver anotações de progresso, elas entram de forma clara no campo final de conduta da célula
                 if progresso_c:
                     lista_condutas.append(f"[PROGRESSO: {progresso_c}]")
                 string_condutas = " | ".join(lista_condutas) if lista_condutas else "Conduta padrão"
 
                 st.success("🎉 Linha estruturada gerada com sucesso! Copie e cole na última linha vazia da aba 'Alunos':")
                 
-                # Formatação CSV para o Google Sheets (14 colunas estruturadas)
                 linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}"'
                 st.code(linha_csv, language="text")
             else:
@@ -334,12 +332,25 @@ elif menu == "💰 Financeiro":
         st.metric(label="Faturamento Total Acumulado", value=valor_formatado)
     st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
 
-# --- 9. TELA: PREÇOS ---
+# --- 9. TELA: PREÇOS Tabela Oficial Fixada ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Tabela de Preços e Modelos de Planos")
+    st.markdown("Abaixo estão listados os planos de contratação oficiais vigentes no **Studio Highline**:")
+    
+    # Criando a estrutura de dados com a tabela de preços oficial informada
+    dados_precos_oficiais = {
+        "Frequência Semanal": ["1x na semana", "2x na semana", "3x na semana"],
+        "Valor Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"]
+    }
+    df_tabela_oficial = pd.DataFrame(dados_precos_oficiais)
+    
+    # Renderiza a tabela de forma limpa e direta
+    st.table(df_tabela_oficial)
+    
+    st.markdown("---")
+    st.subheader("Auditoria de Valores Praticados (Planilha de Alunos)")
+    # Mantém também a auditoria dinâmica para você saber se tem alguém fora do valor padrão
     if "Plano" in df_alunos.columns and "Valor" in df_alunos.columns:
         df_precos = df_alunos.groupby("Plano")["Valor"].unique().reset_index()
-        df_precos["Valores Praticados"] = df_precos["Valor"].apply(lambda x: ", ".join([str(i) for i in x if i != ""]))
-        st.table(df_precos[["Plano", "Valores Praticados"]])
-    else:
-        st.info("Dados insuficientes para gerar relatório de preços.")
+        df_precos["Valores em Uso na Ficha"] = df_precos["Valor"].apply(lambda x: ", ".join([str(i) for i in x if i != ""]))
+        st.dataframe(df_precos[["Plano", "Valores em Uso na Ficha"]], use_container_width=True, hide_index=True)
