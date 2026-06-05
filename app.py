@@ -266,9 +266,9 @@ elif menu == "🗺️ Mapa":
         contagem.columns = ["Bairro", "Quantidade de Alunos"]
         st.bar_chart(data=contagem, x="Bairro", y="Quantidade de Alunos")
 
-# --- 6. TELA: PERFIL (COM PRONTUÁRIO INDIVIDUAL + DASHBOARD ESTATÍSTICO) ---
+# --- 6. TELA: PERFIL (SEM O TERMO CORRIGIDO) ---
 elif menu == "👤 Perfil":
-    st.title("👤 Ficha Clínica-Desportiva Analítica")
+    st.title("👤 Prontuário Individual e Indicadores da Base Ativa")
     
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
@@ -303,11 +303,11 @@ elif menu == "👤 Perfil":
                 st.subheader("📋 Queixa Principal / Anamnese")
                 st.info(ficha.get('Queixa', 'Nenhum registro adicionado.'))
             with col_c:
-                st.subheader("🛠️ Conduta Clínica-Desportiva & Evolução")
+                st.subheader("🛠️ Conduta & Evolução")
                 st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
 
     # ==========================================
-    # REINSERÇÃO DOS GRÁFICOS ANALÍTICOS GERAIS
+    # PAINEL DE GRÁFICOS ANALÍTICOS GERAIS
     # ==========================================
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("---")
@@ -318,7 +318,7 @@ elif menu == "👤 Perfil":
         
         # (a) Gráfico de Pizza: Distribuição de Gênero
         with g_col1:
-            st.markdown("### Distribution por Gênero")
+            st.markdown("### Distribuição por Gênero")
             if "Genero" in df_ativos.columns:
                 df_gen = df_ativos["Genero"].value_counts().reset_index()
                 df_gen.columns = ["Gênero", "Quantidade"]
@@ -371,9 +371,7 @@ elif menu == "👤 Perfil":
                 
                 df_fin_rec["Dia_Venc"] = pd.to_numeric(df_fin_rec["Vencimento"], errors="coerce").fillna(10).astype(int)
                 
-                # Agrupa por dia do mês (1 a 31)
                 fluxo_mensal = df_fin_rec.groupby("Dia_Venc")["Valor_Num"].sum().reset_index()
-                # Cria a estrutura completa de 31 dias para o gráfico ficar bonito
                 estrutura_mes = pd.DataFrame({"Dia_Venc": list(range(1, 32))})
                 fluxo_completo = pd.merge(estrutura_mes, fluxo_mensal, on="Dia_Venc", how="left").fillna(0)
                 fluxo_completo.columns = ["Dia do Vencimento", "Total a Receber (R$)"]
@@ -392,7 +390,6 @@ elif menu == "👤 Perfil":
                 todas_queixas = []
                 for q_linha in df_ativos["Queixa"]:
                     if q_linha and q_linha != "Sem queixas registradas":
-                        # Separa as queixas caso estejam agrupadas por pipe '|'
                         partes = [p.strip() for p in str(q_linha).split("|") if p.strip()]
                         todas_queixas.extend(partes)
                 
@@ -474,16 +471,16 @@ elif menu == "📝 Cadastro":
         else:
             if st.form_submit_button("Validar e Gerar Linha de Cadastro"):
                 if nome_c and tel_c:
-                    lista_queixas = []
-                    if q_lombar: lista_queixas.append("Dor Lombar")
-                    if q_cervical: lista_queixas.append("Dor Cervical")
-                    if q_hernia: lista_queixas.append("Hérnia de Disco")
-                    if q_joelho: lista_queixas.append("Lesão Joelho")
-                    if q_ombro: lista_queixas.append("Lesão Ombro")
-                    if q_postura: lista_queixas.append("Melhoria Postural")
-                    if q_flexi: lista_queixas.append("Ganho Flexibilidade")
-                    if queixa_extra: lista_queixas.append(queixa_extra)
-                    string_queixas = " | ".join(lista_queixas) if lista_queixas else "Sem queixas registradas"
+                    checkpoint_queixas = []
+                    if q_lombar: checkpoint_queixas.append("Dor Lombar")
+                    if q_cervical: checkpoint_queixas.append("Dor Cervical")
+                    if q_hernia: checkpoint_queixas.append("Hérnia de Disco")
+                    if q_joelho: checkpoint_queixas.append("Lesão Joelho")
+                    if q_ombro: checkpoint_queixas.append("Lesão Ombro")
+                    if q_postura: checkpoint_queixas.append("Melhoria Postural")
+                    if q_flexi: checkpoint_queixas.append("Ganho Flexibilidade")
+                    if queixa_extra: checkpoint_queixas.append(queixa_extra)
+                    string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas registradas"
 
                     st.success("🎉 Linha estruturada gerada!")
                     linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{conduta_extra}","{genero_c}","{nasc_c}","{inicio_c}","{cpf_c}","{endereco_c}"'
