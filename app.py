@@ -26,6 +26,13 @@ st.markdown("""
             border-left: 5px solid #2E5A44 !important;
             color: #1B5E20 !important;
         }
+        /* Centralizar o container do logo na barra lateral */
+        .logo-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 0px 20px 0px;
+        }
         /* Estilo para esconder elementos da web na hora de imprimir */
         @media print {
             [data-testid="stSidebar"], 
@@ -111,13 +118,17 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO E MENU ORDENADO
+# 3. BARRA LATERAL - LOGO CORRIGIDO E MENU
 # ==========================================
 with st.sidebar:
-    # Tentativa de carregar a imagem do logo localmente
-    nome_logo = "Highline Logo.png"
-    if os.path.exists(nome_logo):
-        st.image(nome_logo, use_container_width=True)
+    # Definição do nome exato do arquivo de imagem carregado no GitHub
+    arquivo_logo = "Highline Logo.png"
+    
+    if os.path.exists(arquivo_logo):
+        # Cria um container centralizado para o logo redondo ficar elegante
+        st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+        st.image(arquivo_logo, width=180)
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.markdown("## 🏋️‍♂️ Studio Highline")
         
@@ -256,7 +267,7 @@ elif menu == "👥 Alunos":
                 
             if btn_inativar_alt:
                 st.warning(f"Linha de desativação gerada para {aluno_para_editar}. Substitua a linha dele na planilha por esta para movê-lo ao Arquivo Morto:")
-                linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_aurais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
+                linha_inativo_csv = f'"{aluno_para_editar}","{dados_atuais.get("Telefone","")}","{dados_atuais.get("Bairro","")}","{dados_atuais.get("Plano","")}","{dados_atuais.get("Valor","")}",{dados_atuais.get("Vencimento",10)},"{dados_atuais.get("Dias","")}","{dados_atuais.get("Horario","")}","Inativo","{dados_atuais.get("Queixa","")}","{dados_atuais.get("Conduta","")}","{dados_atuais.get("Genero","")}","{dados_atuais.get("Nascimento","")}","{dados_atuais.get("Inicio_Aulas","")}","{dados_atuais.get("CPF","")}","{dados_atuais.get("Endereco","")}"'
                 st.code(linha_inativo_csv, language="text")
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
