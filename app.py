@@ -7,7 +7,7 @@ from datetime import datetime
 # ==========================================
 st.set_page_config(page_title="Highline Management", layout="wide", page_icon="🏋️‍♂️")
 
-# Restaura o fundo verde escuro na barra lateral idêntico ao original da foto
+# Mantém a barra lateral com o verde-escuro original da foto do seu app
 st.markdown("""
     <style>
         [data-testid="stSidebar"] {
@@ -17,7 +17,7 @@ st.markdown("""
             color: white !important;
         }
         .stRadio input[type="radio"]:checked + div {
-            color: #FFD700 !important; /* Destaque dourado na opção selecionada */
+            color: #FFD700 !important;
             font-weight: bold !important;
         }
         div.stAlert {
@@ -55,7 +55,7 @@ except Exception as e:
     erro_msg = str(e)
 
 # ==========================================
-# 3. BARRA LATERAL - MENU VERTICAL (FOTO)
+# 3. BARRA LATERAL - MENU VERTICAL ORIGINAL
 # ==========================================
 with st.sidebar:
     st.markdown("## 🏋️‍♂️ Studio Highline")
@@ -89,7 +89,7 @@ if not conexao_ok:
     st.stop()
 
 # ==========================================
-# 4. TRATAMENTO DAS TELAS
+# 4. TRATAMENTO DAS TELAS DO APP
 # ==========================================
 
 # --- 1. TELA: AGENDA ---
@@ -197,19 +197,19 @@ elif menu == "👤 Perfil":
             st.markdown("---")
             col_q, col_c = st.columns(2)
             with col_q:
-                st.subheader("📋 Queixa Principal / Histórico (Anamnese)")
-                st.info(ficha.get('Queixa', 'Nenhum registro de queixa adicionado.'))
+                st.subheader("📋 Queixa Principal / Anamnese")
+                st.info(ficha.get('Queixa', 'Nenhum registro adicionado.'))
             with col_c:
                 st.subheader("🛠️ Conduta Clínica-Desportiva")
-                st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada para este aluno.'))
+                st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
 
-# --- 7. TELA: CADASTRO COM ANAMNESE ---
+# --- 7. TELA: CADASTRO COM ANAMNESE E CAIXA DE PROGRESSOS ---
 elif menu == "📝 Cadastro":
-    st.title("📝 Cadastro e Ficha de Anamnese")
-    st.markdown("Insira os dados completos do aluno para gerar a linha estruturada na ordem correta das colunas da planilha.")
+    st.title("📝 Cadastro e Anamnese Estruturada")
+    st.markdown("Selecione as opções clínicas correspondentes para gerar automaticamente a linha de dados formatada para o Google Sheets.")
     
-    with st.form("form_novo_aluno_anamnese"):
-        st.subheader("1. Dados Pessoais e de Contato")
+    with st.form("form_novo_aluno_anamnese_avancada"):
+        st.subheader("1. Dados Pessoais e de Contrato")
         nome_c = st.text_input("Nome Completo:")
         tel_c = st.text_input("WhatsApp com DDD (Ex: 11999998888):")
         bairro_c = st.text_input("Bairro de Residência:")
@@ -228,24 +228,99 @@ elif menu == "📝 Cadastro":
         st.subheader("2. Planejamento de Horários")
         col_dias, col_hora = st.columns(2)
         with col_dias:
-            dias_c = st.text_input("Dias de Aula Fixados (Ex: Ter/Qui ou Seg/Qua/Sex):")
+            dias_c = st.text_input("Dias de Aula Fixados (Ex: Ter/Qui):")
         with col_hora:
             horario_c = st.text_input("Horário Escolhido (Ex: 08:30):")
             
-        st.subheader("3. Ficha de Anamnese Clínica")
-        queixa_c = st.text_area("Queixa Principal / Histórico de Lesões / Objetivos:", placeholder="Descreva os problemas de coluna, articulações, dores ou limitações físicas relatadas pelo aluno...")
-        conduta_c = st.text_area("Conduta Clínica-Desportiva / Restrições / Exercícios Recomendados:", placeholder="Prescreva as diretrizes do treino, limitações de carga, movimentos proibidos ou foco especial do tratamento...")
+        st.subheader("3. Anamnese: Queixas Principais e Sintomas (Múltipla Escolha)")
+        st.markdown("###### Selecione todas as queixas clínicas relatadas pelo aluno:")
         
+        col_q1, col_q2, col_q3 = st.columns(3)
+        with col_q1:
+            q_lombar = st.checkbox("Dor Lombar (Lombalgia)")
+            q_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
+            q_hernia = st.checkbox("Hérnia de Disco / Protrusão")
+            q_escoliose = st.checkbox("Escoliose / Desvios Posturais")
+        with col_q2:
+            q_joelho = st.checkbox("Dor / Lesão nos Joelhos")
+            q_ombro = st.checkbox("Dor / Lesão nos Ombros")
+            q_quadril = st.checkbox("Desconforto / Lesão no Quadril")
+            q_artrose = st.checkbox("Artrose / Artrite / Osteopenia")
+        with col_q3:
+            q_postura = st.checkbox("Melhoria Postural Operacional")
+            q_flexi = st.checkbox("Ganho de Flexibilidade / Mobilidade")
+            stretching = st.checkbox("Condicionamento / Tonificação Muscular")
+            q_estresse = st.checkbox("Alívio de Estresse / Bem-Estar")
+            
+        queixa_extra = st.text_input("Outras Queixas / Histórico Clínico Adicional:")
+
+        st.subheader("4. Conduta Clínica-Desportiva e Tratamento (Múltipla Escolha)")
+        st.markdown("###### Selecione as estratégias de tratamento e condutas aplicadas:")
+        
+        col_cond1, col_cond2, col_cond3 = st.columns(3)
+        with col_cond1:
+            c_fortalece = st.checkbox("Fortalecimento de Core / Powerhouse")
+            c_reab = st.checkbox("Reabilitação / Estabilização Segmentar")
+            c_alonga = st.checkbox("Alongamento Axial / Descompressão")
+        with col_cond2:
+            c_mobilidade = st.checkbox("Treino de Mobilidade Articular Completa")
+            c_postural = st.checkbox("Correção Postural Dinâmica")
+            c_respiracao = st.checkbox("Controle Respiratório e Ativação")
+        with col_cond3:
+            c_restricao = st.checkbox("Restrição de Carga / Movimentos Flexo-Torção")
+            c_adaptado = st.checkbox("Exercícios Adaptados para Patologias")
+            c_geral = st.checkbox("Pilates Clínico Geral / Manutenção")
+            
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações Técnicas:")
+        
+        # --- NOVO CAMPO SOLICITADO ---
+        st.subheader("5. Evolução e Acompanhamento Clínico")
+        progresso_c = st.text_area("Evolução / Histórico de Progressos do Aluno em Relação ao Tratamento:", placeholder="Registre aqui a evolução das dores, ganho de mobilidade, respostas aos exercícios e relatos de melhora do aluno ao longo do tempo...")
+
         if st.form_submit_button("Validar e Gerar Linha de Cadastro"):
             if nome_c and tel_c:
-                st.success("🎉 Cadastro e Ficha de Anamnese gerados! Copie o código abaixo e cole na última linha vazia da sua aba 'Alunos':")
+                # Processa a string de queixas
+                lista_queixas = []
+                if q_lombar: lista_queixas.append("Dor Lombar")
+                if q_cervical: lista_queixas.append("Dor Cervical")
+                if q_hernia: lista_queixas.append("Hérnia de Disco")
+                if q_escoliose: lista_queixas.append("Escoliose")
+                if q_joelho: lista_queixas.append("Lesão Joelho")
+                if q_ombro: lista_queixas.append("Lesão Ombro")
+                if q_quadril: lista_queixas.append("Desconforto Quadril")
+                if q_artrose: lista_queixas.append("Artrose/Artrite")
+                if q_postura: lista_queixas.append("Melhoria Postural")
+                if q_flexi: lista_queixas.append("Ganho Flexibilidade")
+                if stretching: lista_queixas.append("Tonificação")
+                if q_estresse: lista_queixas.append("Alívio Estresse")
+                if queixa_extra: lista_queixas.append(queixa_extra)
+                string_queixas = " | ".join(lista_queixas) if lista_queixas else "Sem queixas registradas"
+
+                # Processa a string de condutas e funde com as notas de progresso
+                lista_condutas = []
+                if c_fortalece: lista_condutas.append("Fortalecimento de Core")
+                if c_reab: lista_condutas.append("Reabilitação")
+                if c_alonga: lista_condutas.append("Alongamento Axial")
+                if c_mobilidade: lista_condutas.append("Treino Mobilidade")
+                if c_postural: lista_condutas.append("Correção Postural")
+                if c_respiracao: lista_condutas.append("Controle Respiratório")
+                if c_restricao: lista_condutas.append("Restrição Carga/Torção")
+                if c_adaptado: lista_condutas.append("Exercícios Adaptados")
+                if c_geral: lista_condutas.append("Pilates Clínico Geral")
+                if conduta_extra: lista_condutas.append(conduta_extra)
                 
-                # Monta a string CSV respeitando estritamente a sequência de colunas:
-                # Nome, Telefone, Bairro, Plano, Valor, Vencimento, Dias, Horario, Status, Queixa, Conduta, Genero, Nascimento, Inicio_Aulas
-                linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{queixa_c}","{conduta_c}","{genero_c}","{nasc_c}","{inicio_c}"'
+                # Se houver anotações de progresso, elas entram de forma clara no campo final de conduta da célula
+                if progresso_c:
+                    lista_condutas.append(f"[PROGRESSO: {progresso_c}]")
+                string_condutas = " | ".join(lista_condutas) if lista_condutas else "Conduta padrão"
+
+                st.success("🎉 Linha estruturada gerada com sucesso! Copie e cole na última linha vazia da aba 'Alunos':")
+                
+                # Formatação CSV para o Google Sheets (14 colunas estruturadas)
+                linha_csv = f'"{nome_c}","{tel_c}","{bairro_c}","{plano_c}","{valor_c}",{venc_c},"{dias_c}","{horario_c}","Ativo","{string_queixas}","{string_condutas}","{genero_c}","{nasc_c}","{inicio_c}"'
                 st.code(linha_csv, language="text")
             else:
-                st.error("Erro: Os campos 'Nome' e 'WhatsApp' são obrigatórios para validar o registro.")
+                st.error("Erro: Os campos 'Nome' e 'WhatsApp' são obrigatórios.")
 
 # --- 8. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
