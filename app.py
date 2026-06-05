@@ -25,6 +25,21 @@ st.markdown("""
             border-left: 5px solid #2E5A44 !important;
             color: #1B5E20 !important;
         }
+        /* Estilo para esconder elementos da web na hora de imprimir */
+        @media print {
+            [data-testid="stSidebar"], 
+            .stHeader, 
+            footer, 
+            .no-print,
+            button {
+                display: none !important;
+            }
+            .print-container {
+                width: 100%;
+                border: none !important;
+                padding: 0 !important;
+            }
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -95,7 +110,7 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - MENU VERTICAL ORIGINAL
+# 3. BARRA LATERAL - MENU VERTICAL ORIGINAL ATUALIZADO
 # ==========================================
 with st.sidebar:
     st.markdown("## 🏋️‍♂️ Studio Highline")
@@ -110,6 +125,7 @@ with st.sidebar:
             "⏳ Espera",
             "🗺️ Mapa",
             "👤 Perfil",
+            "🖨️ Imprimir Prontuário",  # Novo item adicionado aqui
             "📝 Cadastro",
             "💰 Financeiro",
             "⚙️ Preços"
@@ -266,53 +282,18 @@ elif menu == "🗺️ Mapa":
         contagem.columns = ["Bairro", "Quantidade de Alunos"]
         st.bar_chart(data=contagem, x="Bairro", y="Quantidade de Alunos")
 
-# --- 6. TELA: PERFIL (SEM O TERMO CORRIGIDO) ---
+# --- 6. TELA: PERFIL (DASHBOARD GERAL DE INDICÁDORES DA BASE ATIVA) ---
 elif menu == "👤 Perfil":
-    st.title("👤 Prontuário Individual e Indicadores da Base Ativa")
+    st.title("👤 Indicadores Estruturais da Base Ativa")
     
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
         df_ativos = df_alunos.copy()
 
-    if "Nome" in df_alunos.columns:
-        aluno_sel = st.selectbox("Selecione um aluno para extrair o prontuário completo:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist())
-        if aluno_sel != "-- Escolha um Aluno --":
-            ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
-            st.markdown(f"## Ficha de: {aluno_sel}")
-            st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.markdown(f"📞 **Telefone:** {ficha.get('Telefone', 'N/D')}")
-                st.markdown(f"🏡 **Bairro:** {ficha.get('Bairro', 'N/D')}")
-                st.markdown(f"🧬 **Gênero:** {ficha.get('Genero', 'N/D')}")
-                st.markdown(f"🪪 **CPF:** {ficha.get('CPF', 'N/D')}")
-            with c2:
-                st.markdown(f"📅 **Nascimento:** {ficha.get('Nascimento', 'N/D')}")
-                st.markdown(f"🚀 **Início das Aulas:** {ficha.get('Inicio_Aulas', 'N/D')}")
-                st.markdown(f"💎 **Plano:** {ficha.get('Plano', 'N/D')}")
-            with c3:
-                st.markdown(f"💰 **Valor Mensal:** {ficha.get('Valor', 'N/D')}")
-                st.markdown(f"📆 **Vencimento:** Dia {ficha.get('Vencimento', 'N/D')}")
-                st.markdown(f"⚡ **Status:** {ficha.get('Status', 'N/D')}")
-            
-            st.markdown(f"📍 **Endereço Completo:** {ficha.get('Endereco', 'N/D')}")
-            st.markdown("---")
-            col_q, col_c = st.columns(2)
-            with col_q:
-                st.subheader("📋 Queixa Principal / Anamnese")
-                st.info(ficha.get('Queixa', 'Nenhum registro adicionado.'))
-            with col_c:
-                st.subheader("🛠️ Conduta & Evolução")
-                st.success(ficha.get('Conduta', 'Nenhuma conduta desenhada.'))
-
     # ==========================================
     # PAINEL DE GRÁFICOS ANALÍTICOS GERAIS
     # ==========================================
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown("## 📊 Painel Demográfico e Indicadores Estruturais (Base Ativa)")
-    
     if not df_ativos.empty:
         g_col1, g_col2 = st.columns(2)
         
@@ -406,6 +387,88 @@ elif menu == "👤 Perfil":
                 st.info("Coluna de Queixas indisponível.")
     else:
         st.info("Cadastre alunos ativos para popular os indicadores visuais.")
+
+# --- TELA NOVA: 🖨️ IMPRIMIR PRONTUÁRIO ---
+elif menu == "🖨️ Imprimir Prontuário":
+    st.title("🖨️ Impressão de Prontuário de Aluno")
+    
+    if "Nome" in df_alunos.columns:
+        aluno_sel = st.selectbox("Selecione o aluno para gerar a folha de prontuário:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist(), key="print_select")
+        
+        if aluno_sel != "-- Escolha um Aluno --":
+            ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
+            
+            # Botão visível na web para disparar a janela de impressão do navegador
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
+            if st.button("🖨️ Abrir Janela de Impressão / Salvar PDF"):
+                st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Container estruturado para a folha de impressão
+            st.markdown(f"""
+            <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
+                <div style="text-align: center; margin-bottom: 25px;">
+                    <h1 style="color: #2E5A44; margin: 0; font-size: 28px;">STUDIO HIGHLINE</h1>
+                    <p style="margin: 5px 0; font-size: 14px; letter-spacing: 2px; color: #555;">PRONTUÁRIO DE ACOMPANHAMENTO INDIVIDUAL</p>
+                    <hr style="border: 0; border-top: 2px solid #2E5A44; margin-top: 15px;">
+                </div>
+                
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">1. DADOS PESSOAIS</h3>
+                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <td style="padding: 8px 0; width: 60%;"><strong>Nome Completo:</strong> {aluno_sel}</td>
+                        <td style="padding: 8px 0;"><strong>Gênero:</strong> {ficha.get('Genero', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Data de Nascimento:</strong> {ficha.get('Nascimento', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>CPF:</strong> {ficha.get('CPF', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Telefone/WhatsApp:</strong> {ficha.get('Telefone', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Bairro:</strong> {ficha.get('Bairro', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="padding: 8px 0;"><strong>Endereço Completo:</strong> {ficha.get('Endereco', 'N/D')}</td>
+                    </tr>
+                </table>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">2. DADOS CONTRATUAIS</h3>
+                <table style="width: 100%; font-size: 15px; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr>
+                        <td style="padding: 8px 0; width: 33%;"><strong>Plano:</strong> {ficha.get('Plano', 'N/D')}</td>
+                        <td style="padding: 8px 0; width: 33%;"><strong>Valor Contratado:</strong> {ficha.get('Valor', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Dia Vencimento:</strong> Dia {ficha.get('Vencimento', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px 0;"><strong>Dias Fixados:</strong> {ficha.get('Dias', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Horário Oficial:</strong> {ficha.get('Horario', 'N/D')}</td>
+                        <td style="padding: 8px 0;"><strong>Início das Aulas:</strong> {ficha.get('Inicio_Aulas', 'N/D')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" style="padding: 8px 0;"><strong>Status da Matrícula:</strong> {ficha.get('Status', 'N/D')}</td>
+                    </tr>
+                </table>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">3. ANAMNESE / QUEIXA PRINCIPAL</h3>
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #2E5A44; line-height: 1.5; min-height: 80px; margin-top: 10px; color: #333;">
+                    {ficha.get('Queixa', 'Nenhum registro adicionado.')}
+                </div>
+
+                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">4. DIRETRIZES DE CONDUTA & EVOLUÇÃO</h3>
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; font-size: 15px; border-left: 4px solid #FFD700; line-height: 1.5; min-height: 120px; margin-top: 10px; color: #333;">
+                    {ficha.get('Conduta', 'Nenhuma conduta desenhada.')}
+                </div>
+                
+                <div style="margin-top: 70px; text-align: center; font-size: 13px; color: #777;">
+                    <p>____________________________________________________</p>
+                    <p>Assinatura do Responsável Técnico / Avaliador</p>
+                    <p style="font-size: 11px; margin-top: 15px;">Documento gerado em {datetime.now().strftime("%d/%m/%Y às %H:%M")} via Highline Management.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    else:
+        st.info("Nenhum dado encontrado para gerar prontuários.")
 
 # --- 7. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
