@@ -65,11 +65,34 @@ def formatar_brl(valor):
         if isinstance(valor, (int, float)):
             val_float = float(valor)
         else:
-            val_limpo = str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()
+            val_limpo = str(valor).replace("R$", "").replace(" ", "")
+            # Se tiver vírgula e ponto, tira o ponto (milhar) e troca a vírgula por ponto (decimal)
+            if "," in val_limpo and "." in val_limpo:
+                val_limpo = val_limpo.replace(".", "").replace(",", ".")
+            # Se só tiver vírgula, troca por ponto
+            elif "," in val_limpo:
+                val_limpo = val_limpo.replace(",", ".")
             val_float = float(val_limpo)
         return f"R$ {val_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
         return str(valor)
+
+def converter_para_float(valor):
+    """Converte valores da planilha de forma segura para float sem multiplicar por 10"""
+    try:
+        if pd.isna(valor) or valor == "":
+            return 0.0
+        if isinstance(valor, (int, float)):
+            return float(valor)
+        
+        texto = str(valor).replace("R$", "").replace(" ", "")
+        if "," in texto and "." in texto:
+            texto = texto.replace(".", "").replace(",", ".")
+        elif "," in texto:
+            texto = texto.replace(",", ".")
+        return float(texto)
+    except:
+        return 0.0
 
 # ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
@@ -277,10 +300,7 @@ elif menu == "👥 Alunos":
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
                 valor_sugerido_bruto = dados_atuais.get("Valor", 220)
-                try:
-                    valor_sugerido_float = float(str(valor_sugerido_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
-                except:
-                    valor_sugerido_float = 220.0
+                valor_sugerido_float = converter_para_float(valor_sugerido_bruto)
                     
                 novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
                 
@@ -312,7 +332,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated com sucesso!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -513,7 +533,7 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO (BUSCA UNIVERSAL CORRIGIDA) ---
+# --- 5. TELA: FINANCEIRO (CORRIGIDA) ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
@@ -522,8 +542,8 @@ elif menu == "💰 Financeiro":
     
     if df_financeiro is not None and not df_financeiro.empty:
         if "Status" in df_financeiro.columns and "Valor" in df_financeiro.columns:
-            df_financeiro["Valor_Num"] = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
-            df_financeiro["Valor_Num"] = pd.to_numeric(df_financeiro["Valor_Num"], errors="coerce").fillna(0.0)
+            # CORREÇÃO CRÍTICA AQUI: Usando a função robusta para evitar multiplicação por 10
+            df_financeiro["Valor_Num"] = df_financeiro["Valor"].apply(converter_para_float)
             
             total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor_Num"].sum()
             total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor_Num"].sum()
@@ -557,7 +577,6 @@ elif menu == "💰 Financeiro":
     
     st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
     
-    # Busca os alunos Ativos diretamente do dataframe de alunos cadastrados
     if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
         alunos_ativos = df_alunos[df_alunos["Status"].astype(str).str.strip().str.upper() == "ATIVO"]
         
@@ -569,18 +588,14 @@ elif menu == "💰 Financeiro":
                 venc_dia = row.get("Vencimento", "-")
                 opcoes_alunos.append(f"{nome_aluno} | Vencimento: dia {venc_dia} (Padrão: {formatar_brl(val_mensal)})")
                 
-            selecionado_baixa_str = st.selectbox("Selecione o aluno para registrar o pagamento antecipado:", options=opcoes_alunos)
+            selecionado_baixa_str = st.selectbox("Selecione o aluno para registrar o pagamento:", options=opcoes_alunos)
             
-            # Divide a string escolhida para pegar exatamente o nome do aluno ativo
             nome_filtrado = selecionado_baixa_str.split(" | ")[0]
             aluno_row_dados = alunos_ativos[alunos_ativos["Nome"] == nome_filtrado].iloc[0]
             
             col_b1, col_b2, col_b3 = st.columns(3)
             with col_b1:
-                try:
-                    val_sugerido = float(str(aluno_row_dados.get("Valor", 0)).replace("R$", "").replace(".", "").replace(",", ".").strip())
-                except:
-                    val_sugerido = 0.0
+                val_sugerido = converter_para_float(aluno_row_dados.get("Valor", 0))
                 valor_entrada = st.number_input("Confirmar Valor Pago (R$):", value=val_sugerido, step=10.0)
             with col_b2:
                 forma_pagto = st.selectbox("Forma de Pagamento:", ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
@@ -588,6 +603,7 @@ elif menu == "💰 Financeiro":
                 categoria_pagto = st.selectbox("Categoria do Lançamento:", ["Mensalidade", "Aula Avulsa", "Avaliação", "Outros"])
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
+                # CORREÇÃO AQUI: Gravando explicitamente a data de hoje ao registrar o recebimento
                 data_registro = datetime.now().strftime("%d/%m/%Y")
                 
                 nova_linha_financeiro = {
@@ -607,7 +623,7 @@ elif menu == "💰 Financeiro":
                 df_financeiro_atualizado = pd.concat([df_financeiro, df_novo_lancamento], ignore_index=True)
                 
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
-                st.success(f"✅ Pagamento de {formatar_brl(valor_entrada)} registrado com sucesso para {nome_filtrado}!")
+                st.success(f"✅ Pagamento de {formatar_brl(valor_entrada)} registrado com sucesso para {nome_filtrado} no dia {data_registro}!")
                 st.cache_data.clear()
                 st.rerun()
         else:
@@ -716,10 +732,7 @@ elif menu == "👤 Perfil":
                     try:
                         venc = int(row["Vencimento"])
                         val_bruto = row["Valor"]
-                        try:
-                            val_f = float(str(val_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
-                        except:
-                            val_f = 0.0
+                        val_f = converter_para_float(val_bruto)
                         if 1 <= venc <= 31:
                             faturamento_por_dia[venc] += val_f
                     except:
