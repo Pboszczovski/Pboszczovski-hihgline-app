@@ -50,6 +50,13 @@ st.markdown("""
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
 try:
+    # TRATAMENTO SEGURO DA PRIVATE KEY: Converte \n em quebras de linha reais se necessário
+    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+        if "private_key" in st.secrets["connections"]["gsheets"]:
+            p_key = st.secrets["connections"]["gsheets"]["private_key"]
+            if "\\n" in p_key:
+                st.secrets["connections"]["gsheets"]["private_key"] = p_key.replace("\\n", "\n")
+
     conn = st.connection("gsheets", type=GSheetsConnection)
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
@@ -100,11 +107,11 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO CORRIGIDA E MENU
+# 3. BARRA LATERAL - LOGO E MENU
 # ==========================================
 with st.sidebar:
     USUARIO_GITHUB = "pboszczovski"
-    REPOSITORIO_GITHUB = "highline-app"  # CORRIGIDO AQUI
+    REPOSITORIO_GITHUB = "highline-app"
     
     url_logo_internet = f"https://raw.githubusercontent.com/{USUARIO_GITHUB}/{REPOSITORIO_GITHUB}/main/Highline%20Logo.png"
     arquivo_logo_local = "Highline Logo.png"
@@ -254,14 +261,14 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated!")
                 st.cache_data.clear()
                 st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("❌ Aluno movido para o Arquivo Morto com sucesso!")
+                st.success("❌ Aluno arquivado!")
                 st.cache_data.clear()
                 st.rerun()
     else:
@@ -364,7 +371,7 @@ elif menu == "📝 Cadastro":
                     
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     
-                    st.success(f"🎉 {nome_c} foi cadastrado com sucesso!")
+                    st.success(f"🎉 {nome_c} cadastrado!")
                     st.cache_data.clear()
                     st.rerun()
 
@@ -421,7 +428,7 @@ elif menu == "👤 Perfil":
                     fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos", color_discrete_sequence=["#2E5A44"])
                     st.plotly_chart(fig_idades, use_container_width=True)
     else:
-        st.info("Cadastre alunos ativos para carregar os gráficos e relatórios automatizados.")
+        st.info("Gráficos indisponíveis.")
 
 # --- 7. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
@@ -458,7 +465,6 @@ elif menu == "🖨️ Imprimir Prontuário":
                 st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # AS ASPAS TRIPLAS ABAIXO FORAM CORRIGIDAS FECHANDO O BLOCO DE TEXTO
             st.markdown(f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
