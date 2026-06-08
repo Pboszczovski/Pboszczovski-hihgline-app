@@ -172,7 +172,8 @@ if not conexao_ok:
 # --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos")
-    hoje_mm_dd = datetime.now().strftime("%m-%d")
+    hoje_datetime = datetime.now()
+    hoje_mm_dd = hoje_datetime.strftime("%m-%d")
     niver_hoje = []
     
     if "Nascimento" in df_alunos.columns and "Nome" in df_alunos.columns:
@@ -190,19 +191,58 @@ if menu == "📅 Agenda":
     else:
         st.info("🎂 Nenhum aluno a fazer aniversário hoje.")
         
-    st.markdown("### Horários Impulsionados para Hoje")
+    # Mapeamento do dia da semana atual para corresponder à entrada de texto da planilha
+    dia_semana_num = hoje_datetime.weekday()
+    
+    dias_validos_busca = []
+    if dia_semana_num == 0:
+        dias_validos_busca = ["SEG", "2A", "SEGUNDA"]
+        nome_dia_formatado = "Segunda-feira"
+    elif dia_semana_num == 1:
+        dias_validos_busca = ["TER", "3A", "TERÇA", "TERCA"]
+        nome_dia_formatado = "Terça-feira"
+    elif dia_semana_num == 2:
+        dias_validos_busca = ["QUA", "4A", "QUARTA"]
+        nome_dia_formatado = "Quarta-feira"
+    elif dia_semana_num == 3:
+        dias_validos_busca = ["QUI", "5A", "QUINTA"]
+        nome_dia_formatado = "Quinta-feira"
+    elif dia_semana_num == 4:
+        dias_validos_busca = ["SEX", "6A", "SEXTA"]
+        nome_dia_formatado = "Sexta-feira"
+    elif dia_semana_num == 5:
+        dias_validos_busca = ["SAB", "SÁBADO", "SABADO"]
+        nome_dia_formatado = "Sábado"
+    else:
+        dias_validos_busca = ["DOM", "DOMINGO"]
+        nome_dia_formatado = "Domingo"
+
+    st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
     if "Status" in df_alunos.columns:
         df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
     else:
         df_ativos = df_alunos.copy()
         
     if not df_ativos.empty:
-        if "Horario" in df_ativos.columns:
-            df_agenda = df_ativos.sort_values(by="Horario")
+        # Filtragem com base no dia da semana na coluna 'Dias'
+        if "Dias" in df_ativos.columns:
+            condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(
+                lambda x: any(termo in x for termo in dias_validos_busca)
+            )
+            df_agenda = df_ativos[condicao_dia]
         else:
-            df_agenda = df_ativos
-        colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
-        st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
+            df_agenda = df_ativos.copy()
+            
+        # Ordenação por Horário
+        if not df_agenda.empty and "Horario" in df_agenda.columns:
+            df_agenda = df_agenda.sort_values(by="Horario")
+            
+        # Exibição dos resultados filtrados do dia
+        if not df_agenda.empty:
+            colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
+            st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
+        else:
+            st.warning(f"Nenhum aluno agendado para esta {nome_dia_formatado}.")
     else:
         st.warning("Nenhum aluno ativo encontrado na base de dados.")
 
@@ -272,7 +312,7 @@ elif menu == "👥 Alunos":
                     df_alunos.at[idx_real_planilha, "Horário"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada!")
+                st.success("🎉 Planilha updated!")
                 st.cache_data.clear()
                 st.rerun()
                 
