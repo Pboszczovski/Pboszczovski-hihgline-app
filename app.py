@@ -59,22 +59,42 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Leitura das abas
+    # Leitura crua das abas
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
     df_espera = conn.read(worksheet="espera")
     
-    # Limpeza e Padronização de Colunas
-    for df in [df_alunos, df_financeiro, df_espera]:
-        if df is not None and not df.empty:
-            df.columns = df.columns.str.strip()
-            # Remove linhas que estão totalmente vazias no Sheets
-            df.dropna(how="all", inplace=True)
-            
-    # Garantir que a aba de espera não traga colunas fantasma "Unnamed"
+    # Tratamento da aba ALUNOS para evitar colunas duplicadas ('Valor' repetido na planilha)
+    if df_alunos is not None and not df_alunos.empty:
+        # Se houver colunas duplicadas, o Pandas costuma nomeá-las como 'Valor' e 'Valor.1'
+        # Vamos padronizar limpando os nomes das colunas
+        novas_colunas = []
+        contador_valor = 0
+        for col in df_alunos.columns:
+            col_strip = str(col).strip()
+            if col_strip == "Valor":
+                if contador_valor == 0:
+                    novas_colunas.append("Valor")
+                else:
+                    novas_colunas.append(f"Valor_{contador_valor}")
+                contador_valor += 1
+            else:
+                novas_colunas.append(col_strip)
+        df_alunos.columns = novas_colunas
+        df_alunos.dropna(how="all", inplace=True)
+    
+    # Tratamento da aba FINANCEIRO
+    if df_financeiro is not None and not df_financeiro.empty:
+        df_financeiro.columns = df_financeiro.columns.str.strip()
+        df_financeiro.dropna(how="all", inplace=True)
+        
+    # Tratamento da aba ESPERA (Remove colunas fantasmas e linhas vazias do Sheets)
     if df_espera is not None and not df_espera.empty:
-        df_espera = df_espera_cols = df_espera.loc[:, ~df_espera.columns.str.contains('^Unnamed')]
-        df_espera.dropna(subset=[df_espera.columns[0]], how="all", inplace=True) # Remove se o Nome estiver vazio
+        df_espera.columns = df_espera.columns.str.strip()
+        df_espera = df_espera.loc[:, ~df_espera.columns.str.contains('^Unnamed')]
+        df_espera.dropna(how="all", inplace=True)
+        if not df_espera.empty and df_espera.columns[0]:
+            df_espera = df_espera[df_espera[df_espera.columns[0]].astype(str).str.strip() != ""]
 
     conexao_ok = True
 except Exception as e:
@@ -84,7 +104,7 @@ except Exception as e:
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
 # ==========================================
 def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
-    if df is完 or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
+    if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
         return [], []
         
     df_ativos = df[df["Status"].astype(str).str.upper() == "ATIVO"]
@@ -446,7 +466,6 @@ elif menu == "⏳ Espera":
         
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
-                # Cria a estrutura nova limpa baseada apenas no que interessa
                 nova_linha_espera = {
                     "Nome": nome_esp, 
                     "Telefone": tel_esp, 
@@ -457,8 +476,7 @@ elif menu == "⏳ Espera":
                 
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
                 
-                # Se a planilha original estava vazia ou só com colunas fantasma, recria de forma limpa
-                if df_espera.empty or "Nome" not in df_espera.columns:
+                if df_espera is None or df_espera.empty or "Nome" not in df_espera.columns:
                     df_espera_atualizado = df_novo_esp
                 else:
                     df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
