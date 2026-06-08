@@ -51,7 +51,6 @@ st.markdown("""
 # ==========================================
 conexao_ok = False
 try:
-    # Tratamento seguro da Private Key contra quebras de linha corrompidas
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
         if "private_key" in st.secrets["connections"]["gsheets"]:
             p_key = st.secrets["connections"]["gsheets"]["private_key"]
@@ -59,18 +58,24 @@ try:
                 st.secrets["connections"]["gsheets"]["private_key"] = p_key.replace("\\n", "\n")
 
     conn = st.connection("gsheets", type=GSheetsConnection)
+    
+    # Leitura das abas
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
-    df_espera = conn.read(worksheet="espera", keep_default_na=False)
+    df_espera = conn.read(worksheet="espera")
     
-    # Padronização de Colunas (Trata acentos como 'Horário' ou 'Horario')
+    # Limpeza e Padronização de Colunas
     for df in [df_alunos, df_financeiro, df_espera]:
         if df is not None and not df.empty:
             df.columns = df.columns.str.strip()
-            # Se encontrar 'Horário', espelha para 'Horario' para manter compatibilidade interna
-            if "Horário" in df.columns and "Horario" not in df.columns:
-                df["Horario"] = df["Horário"]
-                
+            # Remove linhas que estão totalmente vazias no Sheets
+            df.dropna(how="all", inplace=True)
+            
+    # Garantir que a aba de espera não traga colunas fantasma "Unnamed"
+    if df_espera is not None and not df_espera.empty:
+        df_espera = df_espera_cols = df_espera.loc[:, ~df_espera.columns.str.contains('^Unnamed')]
+        df_espera.dropna(subset=[df_espera.columns[0]], how="all", inplace=True) # Remove se o Nome estiver vazio
+
     conexao_ok = True
 except Exception as e:
     erro_msg = str(e)
@@ -79,7 +84,7 @@ except Exception as e:
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
 # ==========================================
 def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
-    if "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
+    if df is完 or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
         return [], []
         
     df_ativos = df[df["Status"].astype(str).str.upper() == "ATIVO"]
@@ -192,41 +197,21 @@ if menu == "📅 Agenda":
         st.info("🎂 Nenhum aluno a fazer aniversário hoje.")
         
     dia_semana_num = hoje_datetime.weekday()
-    
     dias_validos_busca = []
-    if dia_semana_num == 0:
-        dias_validos_busca = ["SEG", "2A", "SEGUNDA"]
-        nome_dia_formatado = "Segunda-feira"
-    elif dia_semana_num == 1:
-        dias_validos_busca = ["TER", "3A", "TERÇA", "TERCA"]
-        nome_dia_formatado = "Terça-feira"
-    elif dia_semana_num == 2:
-        dias_validos_busca = ["QUA", "4A", "QUARTA"]
-        nome_dia_formatado = "Quarta-feira"
-    elif dia_semana_num == 3:
-        dias_validos_busca = ["QUI", "5A", "QUINTA"]
-        nome_dia_formatado = "Quinta-feira"
-    elif dia_semana_num == 4:
-        dias_validos_busca = ["SEX", "6A", "SEXTA"]
-        nome_dia_formatado = "Sexta-feira"
-    elif dia_semana_num == 5:
-        dias_validos_busca = ["SAB", "SÁBADO", "SABADO"]
-        nome_dia_formatado = "Sábado"
-    else:
-        dias_validos_busca = ["DOM", "DOMINGO"]
-        nome_dia_formatado = "Domingo"
+    if dia_semana_num == 0:     dias_validos_busca, nome_dia_formatado = ["SEG", "2A", "SEGUNDA"], "Segunda-feira"
+    elif dia_semana_num == 1:   dias_validos_busca, nome_dia_formatado = ["TER", "3A", "TERÇA", "TERCA"], "Terça-feira"
+    elif dia_semana_num == 2:   dias_validos_busca, nome_dia_formatado = ["QUA", "4A", "QUARTA"], "Quarta-feira"
+    elif dia_semana_num == 3:   dias_validos_busca, nome_dia_formatado = ["QUI", "5A", "QUINTA"], "Quinta-feira"
+    elif dia_semana_num == 4:   dias_validos_busca, nome_dia_formatado = ["SEX", "6A", "SEXTA"], "Sexta-feira"
+    elif dia_semana_num == 5:   dias_validos_busca, nome_dia_formatado = ["SAB", "SÁBADO", "SABADO"], "Sábado"
+    else:                       dias_validos_busca, nome_dia_formatado = ["DOM", "DOMINGO"], "Domingo"
 
     st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
-    if "Status" in df_alunos.columns:
-        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-    else:
-        df_ativos = df_alunos.copy()
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
         
     if not df_ativos.empty:
         if "Dias" in df_ativos.columns:
-            condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(
-                lambda x: any(termo in x for termo in dias_validos_busca)
-            )
+            condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
             df_agenda = df_ativos[condicao_dia]
         else:
             df_agenda = df_ativos.copy()
@@ -245,17 +230,11 @@ if menu == "📅 Agenda":
 # --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    if "Status" in df_alunos.columns:
-        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-    else:
-        df_ativos = df_alunos.copy()
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
 
     st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
     busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo...")
-    if busca and "Nome" in df_ativos.columns:
-        df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)]
-    else:
-        df_ativos_tabela = df_ativos
+    df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
     
     st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
 
@@ -304,8 +283,6 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Valor"] = novo_valor
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
-                if "Horário" in df_alunos.columns:
-                    df_alunos.at[idx_real_planilha, "Horário"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("🎉 Planilha atualizada!")
@@ -441,18 +418,11 @@ elif menu == "📝 Cadastro":
                         "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
-                    
-                    if "Horário" in df_alunos.columns:
-                        nova_linha["Horário"] = horario_c
 
                     df_novo = pd.DataFrame([nova_linha])
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
-                    
-                    if "Horario" in df_alunos_atualizado.columns and "Horário" in df_alunos.columns:
-                        df_alunos_atualizado = df_alunos_atualizado.drop(columns=["Horario"])
 
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
-                    
                     st.success(f"🎉 {nome_c} cadastrado com sucesso!")
                     st.cache_data.clear()
                     st.rerun()
@@ -461,7 +431,6 @@ elif menu == "📝 Cadastro":
 elif menu == "⏳ Espera":
     st.title("⏳ Lista de Espera e Captação de Prospects")
     
-    # Adicionando o Novo Formulário de Entrada para Prospects
     st.markdown("### 📥 Adicionar Novo Prospect em Espera")
     with st.form("form_novo_prospect_espera", clear_on_submit=True):
         col_esp1, col_esp2 = st.columns(2)
@@ -472,34 +441,27 @@ elif menu == "⏳ Espera":
             dias_esp = st.text_input("Preferência de Dias (Ex: Seg/Qua):")
             horario_esp = st.text_input("Preferência de Horário (Ex: 19:00):")
             
-        obs_esp = st.text_input("Observações Adicionais (Ex: Tem preferência por Pilates Clínico / Indicação):")
-        
+        obs_esp = st.text_input("Observações Adicionais:")
         btn_adicionar_espera = st.form_submit_button("➕ Salvar na Lista de Espera")
         
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
-                # Cria a nova linha mapeando dinamicamente com base nas colunas da folha do Sheets
-                nova_linha_espera = {}
-                # Se a planilha tiver colunas específicas, usamos. Se não, geramos as básicas padronizadas
-                colunas_existentes = df_espera.columns.tolist() if not df_espera.empty else ["Nome", "Telefone", "Dias", "Horario", "Observacoes"]
-                
-                # Preenche de forma inteligente para não quebrar a estrutura existente
-                for col in colunas_existentes:
-                    if "NOME" in col.upper(): nova_linha_espera[col] = nome_esp
-                    elif "TEL" in col.upper() or "WHATS" in col.upper(): nova_linha_espera[col] = tel_esp
-                    elif "DIA" in col.upper(): nova_linha_espera[col] = dias_esp
-                    elif "HORA" in col.upper(): nova_linha_espera[col] = horario_esp
-                    elif "OBS" in col.upper(): nova_linha_espera[col] = obs_esp
-                    else: nova_linha_espera[col] = ""
-                
-                # Caso a planilha estivesse totalmente vazia de colunas:
-                if not nova_linha_espera:
-                    nova_linha_espera = {
-                        "Nome": nome_esp, "Telefone": tel_esp, "Dias": dias_esp, "Horario": horario_esp, "Observacoes": obs_esp
-                    }
+                # Cria a estrutura nova limpa baseada apenas no que interessa
+                nova_linha_espera = {
+                    "Nome": nome_esp, 
+                    "Telefone": tel_esp, 
+                    "Dias": dias_esp, 
+                    "Horario": horario_esp, 
+                    "Observacoes": obs_esp
+                }
                 
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
-                df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
+                
+                # Se a planilha original estava vazia ou só com colunas fantasma, recria de forma limpa
+                if df_espera.empty or "Nome" not in df_espera.columns:
+                    df_espera_atualizado = df_novo_esp
+                else:
+                    df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
                 
                 conn.update(worksheet="espera", data=df_espera_atualizado)
                 st.success(f"✅ {nome_esp} adicionado à lista de espera!")
@@ -510,8 +472,14 @@ elif menu == "⏳ Espera":
                 
     st.markdown("---")
     st.markdown("### 📋 Prospects Atuais Aguardando Vaga")
-    st.metric("Total de Clientes em Espera", len(df_espera))
-    st.dataframe(df_espera, use_container_width=True, hide_index=True)
+    
+    total_espera = len(df_espera) if df_espera is not None else 0
+    st.metric("Total de Clientes em Espera Real", total_espera)
+    
+    if total_espera > 0:
+        st.dataframe(df_espera[["Nome", "Telefone", "Dias", "Horario", "Observacoes"]], use_container_width=True, hide_index=True)
+    else:
+        st.info("A lista de espera está vazia no momento.")
 
 # --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
@@ -525,11 +493,7 @@ elif menu == "💰 Financeiro":
 # --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
-    
-    if "Status" in df_alunos.columns:
-        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-    else:
-        df_ativos = df_alunos.copy()
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
 
     if not df_ativos.empty:
         g_col1, g_col2 = st.columns(2)
@@ -584,7 +548,7 @@ elif menu == "📁 Arquivo Morto":
         st.metric("Total de Alunos no Arquivo Morto", len(df_inativos))
         st.dataframe(df_inativos, use_container_width=True, hide_index=True)
 
-# --- 10. TELA: 🖨️ IMPRIMIR PRONTUÁRIO ---
+# --- 10. TELA: Prontuário ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Impressão de Prontuário de Aluno")
     if "Nome" in df_alunos.columns:
