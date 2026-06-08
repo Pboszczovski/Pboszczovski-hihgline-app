@@ -259,9 +259,14 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                # CORREÇÃO DA COLUNA DE VALOR (Usa 'Valor' em vez de 'Valor Plano')
+                # CORREÇÃO: Usa a coluna numérica 'Valor' real e evita o quebre de Dtype
                 valor_sugerido_bruto = dados_atuais.get("Valor", 220)
-                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=float(valor_sugerido_bruto))
+                try:
+                    valor_sugerido_float = float(str(valor_sugerido_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                except:
+                    valor_sugerido_float = 220.0
+                    
+                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
                 
             with c_ed2:
                 novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
@@ -282,7 +287,7 @@ elif menu == "👥 Alunos":
             
             if btn_salvar_alt and not bloqueio_edicao:
                 df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
-                df_alunos.at[idx_real_planilha, "Valor"] = novo_valor  # Salva como numérico puro para evitar erros de Dtype
+                df_alunos.at[idx_real_planilha, "Valor"] = novo_valor  
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
@@ -300,14 +305,35 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: CADASTRO ---
+# --- 3. TELA: CADASTRO (ATUALIZADA COM COMPONENTES DE SELEÇÃO PADRONIZADOS) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
     st.subheader("📌 Personalização de Horários")
     col_dias, col_hora = st.columns(2)
-    with col_dias: dias_c = st.text_input("Dias de Aula Desejados (Ex: Ter/Qui):")
-    with col_hora: horario_c = st.text_input("Horário Escolhido (Ex: 08:30):")
+    
+    with col_dias:
+        dias_selecionados = st.multiselect(
+            "Dias de Aula Desejados:",
+            ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"],
+            placeholder="Escolha os dias..."
+        )
+        dias_c = "/".join(dias_selecionados) if dias_selecionados else ""
+        
+    with col_hora:
+        lista_horarios = [
+            "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", 
+            "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+            "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+            "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+            "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"
+        ]
+        horario_c = st.selectbox(
+            "Horário Escolhido:",
+            ["-- Selecione um Horário --"] + lista_horarios
+        )
+        if horario_c == "-- Selecione um Horário --":
+            horario_c = ""
         
     bloqueio_cadastro = False
     if dias_c and horario_c:
@@ -382,8 +408,9 @@ elif menu == "📝 Cadastro":
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
-        if bloqueio_cadastro:
-            st.form_submit_button("Cadastro Bloqueado devido à Lotação", disabled=True)
+        if bloqueio_cadastro or not dias_c or not horario_c:
+            texto_botao = "Preencha Dias e Horário acima" if (not dias_c or not horario_c) else "Cadastro Bloqueado devido à Lotação"
+            st.form_submit_button(texto_botao, disabled=True)
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno"):
                 if nome_c and tel_c:
@@ -464,16 +491,14 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO (RESTAURAÇÃO DO PAINEL DE INADIMPLÊNCIA ORIGINAL) ---
+# --- 5. TELA: FINANCEIRO (RESTAURAÇÃO COMPLETA DO PAINEL ORIGINAL) ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
-    # Processa os dados reais da aba financeira
     total_recebido = 0.0
     total_pendente = 0.0
     
     if df_financeiro is not None and not df_financeiro.empty:
-        # Tenta calcular dinamicamente com base nas colunas Status e Valor
         if "Status" in df_financeiro.columns and "Valor" in df_financeiro.columns:
             df_financeiro["Valor_Num"] = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
             df_financeiro["Valor_Num"] = pd.to_numeric(df_financeiro["Valor_Num"], errors="coerce").fillna(0.0)
@@ -481,11 +506,9 @@ elif menu == "💰 Financeiro":
             total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor_Num"].sum()
             total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor_Num"].sum()
             
-            # Caso não usem flag Pago/Pendente estruturado, calcula o total da tabela
             if total_recebido == 0.0 and total_pendente == 0.0:
                 total_recebido = df_financeiro["Valor_Num"].sum()
     
-    # 1. Exibição dos Cartões Originais
     f_col1, f_col2 = st.columns(2)
     with f_col1:
         st.metric(label="Total Recebido", value=f"R$ {total_recebido:,.2f}")
@@ -494,7 +517,6 @@ elif menu == "💰 Financeiro":
         
     st.markdown("---")
     
-    # 2. Seção para dar Baixa em Pagamentos Pendentes
     st.markdown("### 🔄 Dar Baixa em Pagamentos Pendentes")
     if df_financeiro is not None and not df_financeiro.empty and "Status" in df_financeiro.columns:
         df_pendentes = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]
@@ -512,7 +534,6 @@ elif menu == "💰 Financeiro":
             if st.button("Confirmar Recebimento"):
                 idx_baixa = int(selecionado_baixa.split("| ID: ")[1])
                 df_financeiro.at[idx_baixa, "Status"] = "Pago"
-                # Remove a coluna auxiliar antes de salvar de volta
                 if "Valor_Num" in df_financeiro.columns:
                     df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                     
@@ -646,7 +667,7 @@ elif menu == "👤 Perfil":
             else:
                 st.info("Colunas de 'Vencimento' ou 'Valor' ausentes para projetar faturamento.")
     else:
-        st.info("Dados de alunos ativos insuficientes para gerar os indicators de perfil.")
+        st.info("Dados de alunos ativos insuficientes para gerar os indicadores de perfil.")
 
 # --- 7. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
