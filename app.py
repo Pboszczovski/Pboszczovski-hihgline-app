@@ -53,10 +53,10 @@ try:
     # Inicializa a conexão de leitura/escrita buscando os parâmetros direto do Secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Carrega os dados em tempo real puxando apenas pelo nome da worksheet
-    df_alunos = conn.read(worksheet="Alunos")
-    df_financeiro = conn.read(worksheet="Financeiro")
-    df_espera = conn.read(worksheet="Lista de Espera", keep_default_na=False)
+    # Carrega os dados em tempo real puxando exatamente pelos nomes reais das abas (minúsculas)
+    df_alunos = conn.read(worksheet="alunos")
+    df_financeiro = conn.read(worksheet="financeiro")
+    df_espera = conn.read(worksheet="espera", keep_default_na=False)
     conexao_ok = True
 except Exception as e:
     conexao_ok = False
@@ -257,15 +257,15 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
-                # Envia e sobrescreve a tabela no Sheets automaticamente
-                conn.update(worksheet="Alunos", data=df_alunos)
-                st.success("🎉 Planilha updated automaticamente com sucesso!")
+                # Envia e sobrescreve a tabela utilizando o nome correto da aba
+                conn.update(worksheet="alunos", data=df_alunos)
+                st.success("🎉 Planilha atualizada automaticamente com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
-                conn.update(worksheet="Alunos", data=df_alunos)
+                conn.update(worksheet="alunos", data=df_alunos)
                 st.success("❌ Aluno movido para o Arquivo Morto com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
@@ -367,7 +367,7 @@ elif menu == "📝 Cadastro":
                     df_novo = pd.DataFrame([nova_linha])
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
                     
-                    conn.update(worksheet="Alunos", data=df_alunos_atualizado)
+                    conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     
                     st.success(f"🎉 {nome_c} foi cadastrado e salvo direto na planilha com sucesso!")
                     st.cache_data.clear()
@@ -466,4 +466,35 @@ elif menu == "🖨️ Imprimir Prontuário":
             st.markdown(f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
-                    <h1 style="color:
+                    <h1 style="color: #2E5A44; margin: 0;">STUDIO HIGHLINE</h1>
+                    <p style="margin: 5px 0; color: #555;">Ficha Cadastral e Prontuário Individual de Acompanhamento</p>
+                </div>
+                <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold; width: 30%;">Nome Completo:</td>
+                        <td style="padding: 8px;">{ficha.get('Nome', 'Não Informado')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">WhatsApp:</td>
+                        <td style="padding: 8px;">{ficha.get('Telefone', 'Não Informado')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Plano Atual:</td>
+                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor', '0,00')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold;">Dias/Horários fixos:</td>
+                        <td style="padding: 8px;">{ficha.get('Dias', 'Não Informado')} às {ficha.get('Horario', 'Não Informado')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold; vertical-align: top;">Histórico de Queixas / Anamnese:</td>
+                        <td style="padding: 8px; color: #b22222; font-weight: bold;">{ficha.get('Queixa', 'Nenhuma registrada')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; font-weight: bold; vertical-align: top;">Diretrizes de Conduta Técnica:</td>
+                        <td style="padding: 8px; font-style: italic;">{ficha.get('Conduta', 'Sem restrições especificadas')}</td>
+                    </tr>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
