@@ -191,7 +191,6 @@ if menu == "📅 Agenda":
     else:
         st.info("🎂 Nenhum aluno a fazer aniversário hoje.")
         
-    # Mapeamento dinâmico do dia da semana atual para busca de strings na planilha
     dia_semana_num = hoje_datetime.weekday()
     
     dias_validos_busca = []
@@ -224,7 +223,6 @@ if menu == "📅 Agenda":
         df_ativos = df_alunos.copy()
         
     if not df_ativos.empty:
-        # Filtragem com base no dia da semana na coluna 'Dias'
         if "Dias" in df_ativos.columns:
             condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(
                 lambda x: any(termo in x for termo in dias_validos_busca)
@@ -233,11 +231,9 @@ if menu == "📅 Agenda":
         else:
             df_agenda = df_ativos.copy()
             
-        # Ordenação por Horário
         if not df_agenda.empty and "Horario" in df_agenda.columns:
             df_agenda = df_agenda.sort_values(by="Horario")
             
-        # Exibição da tabela final filtrada
         if not df_agenda.empty:
             colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
             st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
@@ -374,7 +370,6 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        # Estrutura de Queixas (Anamnese)
         st.subheader("2. Anamnese: Queixas Principais e Sintomas")
         col_q1, col_q2, col_q3 = st.columns(3)
         with col_q1:
@@ -390,7 +385,6 @@ elif menu == "📝 Cadastro":
             
         queixa_extra = st.text_input("Outras Queixas Adicionais:")
         
-        # Estrutura de Condutas e Tratamentos Usuais
         st.subheader("3. Diretrizes de Conduta e Tratamentos Usuais")
         col_t1, col_t2, col_t3 = st.columns(3)
         with col_t1:
@@ -414,7 +408,6 @@ elif menu == "📝 Cadastro":
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno Automaticamente"):
                 if nome_c and tel_c:
-                    # Processamento das Queixas Selecionadas
                     checkpoint_queixas = []
                     if q_lombar: checkpoint_queixas.append("Dor Lombar")
                     if q_cervical: checkpoint_queixas.append("Dor Cervical")
@@ -426,7 +419,6 @@ elif menu == "📝 Cadastro":
                     if queixa_extra: checkpoint_queixas.append(queixa_extra)
                     string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas registradas"
 
-                    # Processamento dos Tratamentos Selecionados
                     checkpoint_condutas = []
                     if t_fortalecimento: checkpoint_condutas.append("Fortalecimento Core")
                     if t_alongamento: checkpoint_condutas.append("Alongamento Cad. Posterior")
@@ -467,7 +459,57 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: ESPERA ---
 elif menu == "⏳ Espera":
-    st.title("⏳ Lista de Espera")
+    st.title("⏳ Lista de Espera e Captação de Prospects")
+    
+    # Adicionando o Novo Formulário de Entrada para Prospects
+    st.markdown("### 📥 Adicionar Novo Prospect em Espera")
+    with st.form("form_novo_prospect_espera", clear_on_submit=True):
+        col_esp1, col_esp2 = st.columns(2)
+        with col_esp1:
+            nome_esp = st.text_input("Nome do Interessado:")
+            tel_esp = st.text_input("WhatsApp de Contato:")
+        with col_esp2:
+            dias_esp = st.text_input("Preferência de Dias (Ex: Seg/Qua):")
+            horario_esp = st.text_input("Preferência de Horário (Ex: 19:00):")
+            
+        obs_esp = st.text_input("Observações Adicionais (Ex: Tem preferência por Pilates Clínico / Indicação):")
+        
+        btn_adicionar_espera = st.form_submit_button("➕ Salvar na Lista de Espera")
+        
+        if btn_adicionar_espera:
+            if nome_esp and tel_esp:
+                # Cria a nova linha mapeando dinamicamente com base nas colunas da folha do Sheets
+                nova_linha_espera = {}
+                # Se a planilha tiver colunas específicas, usamos. Se não, geramos as básicas padronizadas
+                colunas_existentes = df_espera.columns.tolist() if not df_espera.empty else ["Nome", "Telefone", "Dias", "Horario", "Observacoes"]
+                
+                # Preenche de forma inteligente para não quebrar a estrutura existente
+                for col in colunas_existentes:
+                    if "NOME" in col.upper(): nova_linha_espera[col] = nome_esp
+                    elif "TEL" in col.upper() or "WHATS" in col.upper(): nova_linha_espera[col] = tel_esp
+                    elif "DIA" in col.upper(): nova_linha_espera[col] = dias_esp
+                    elif "HORA" in col.upper(): nova_linha_espera[col] = horario_esp
+                    elif "OBS" in col.upper(): nova_linha_espera[col] = obs_esp
+                    else: nova_linha_espera[col] = ""
+                
+                # Caso a planilha estivesse totalmente vazia de colunas:
+                if not nova_linha_espera:
+                    nova_linha_espera = {
+                        "Nome": nome_esp, "Telefone": tel_esp, "Dias": dias_esp, "Horario": horario_esp, "Observacoes": obs_esp
+                    }
+                
+                df_novo_esp = pd.DataFrame([nova_linha_espera])
+                df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
+                
+                conn.update(worksheet="espera", data=df_espera_atualizado)
+                st.success(f"✅ {nome_esp} adicionado à lista de espera!")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error("Por favor, preencha pelo menos o Nome e o WhatsApp de contato.")
+                
+    st.markdown("---")
+    st.markdown("### 📋 Prospects Atuais Aguardando Vaga")
     st.metric("Total de Clientes em Espera", len(df_espera))
     st.dataframe(df_espera, use_container_width=True, hide_index=True)
 
