@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import os
@@ -138,7 +139,7 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO E MENU (Sem Mapa)
+# 3. BARRA LATERAL - LOGO E MENU
 # ==========================================
 with st.sidebar:
     USUARIO_GITHUB = "pboszczovski"
@@ -512,7 +513,7 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO (Interface Clássica Restaurada) ---
+# --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
@@ -530,7 +531,6 @@ elif menu == "💰 Financeiro":
             if total_recebido == 0.0 and total_pendente == 0.0:
                 total_recebido = df_financeiro["Valor_Num"].sum()
     
-    # Blocos visuais customizados superiores
     f_col1, f_col2 = st.columns(2)
     with f_col1:
         st.markdown(
@@ -576,7 +576,7 @@ elif menu == "💰 Financeiro":
                     df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                     
                 conn.update(worksheet="financeiro", data=df_financeiro)
-                st.success("✅ Pagamento confirmado e registrado com sucesso!")
+                st.success("✅ Pagamento confirmed e registrado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
         else:
@@ -595,7 +595,7 @@ elif menu == "💰 Financeiro":
     else:
         st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
-# --- 6. TELA: PERFIL (Com Indicador Geográfico Integrado) ---
+# --- 6. TELA: PERFIL (Gráfico de Barras Corrigido com Valores em Cima) ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
@@ -678,122 +678,107 @@ elif menu == "👤 Perfil":
         with g_col4:
             st.markdown("### Faturamento Projetado por Dia do Mês")
             if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
+                # Cria a estrutura zerada para garantir o mapeamento correto do mês
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
                 
                 for idx, row in df_ativos.iterrows():
                     try:
-                        venc = int(row["Vencimento"])
-                        val_bruto = row["Valor"]
-                        try:
-                            val_f = float(str(val_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
-                        except:
-                            val_f = float(val_bruto)
-                        if 1 <= venc <= 31:
-                            faturamento_por_dia[venc] += val_f
+                        # Limpa o valor de string para numérico puro para o cálculo matemático
+                        v_bruto = str(row["Valor"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
+                        v_float = float(v_bruto)
+                        dia_venc = int(row["Vencimento"])
+                        if 1 <= dia_venc <= 31:
+                            faturamento_por_dia[dia_venc] += v_float
                     except:
                         continue
-                        
-                df_fat = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado (R$)"])
                 
-                fig_fat = px.line(
-                    df_fat, 
-                    x="Dia do Vencimento", 
-                    y="Faturamento Projetado (R$)",
-                    markers=True,
-                    color_discrete_sequence=["#FFD700"]
-                )
-                fig_fat.update_layout(xaxis=dict(tickmode="linear", tick0=1, dtick=2), plot_bgcolor="rgba(0,0,0,0)")
-                st.plotly_chart(fig_fat, use_container_width=True)
+                # Monta o DataFrame do gráfico
+                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia", "Valor Mensal"])
+                # Filtra mantendo apenas os dias com faturamento real maior que zero
+                df_faturamento_filtrado = df_faturamento[df_faturamento["Valor Mensal"] > 0].copy()
+                
+                if not df_faturamento_filtrado.empty:
+                    # Geração do gráfico usando o go.Bar para controle fino de texto sobre as barras
+                    fig_faturamento = go.Figure(data=[
+                        go.Bar(
+                            x=df_faturamento_filtrado["Dia"].astype(str),
+                            y=df_faturamento_filtrado["Valor Mensal"],
+                            # Texto estático contendo o valor em reais R$ mapeado acima de cada dia
+                            text=df_faturamento_filtrado["Valor Mensal"].apply(formatar_brl),
+                            textposition="outside",
+                            textfont=dict(size=11, color="#2E5A44"),
+                            marker_color="#2E5A44"
+                        )
+                    ])
+                    
+                    fig_faturamento.update_layout(
+                        xaxis_title="Dia do Vencimento",
+                        yaxis_title="Total Esperado (R$)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        # Espaço extra no topo da escala Y para que as tags de texto não cortem visualmente
+                        yaxis=dict(range=[0, df_faturamento_filtrado["Valor%s Mensal" % ''] .max() * 1.25]),
+                        margin=dict(l=20, r=20, t=20, b=20)
+                    )
+                    st.plotly_chart(fig_faturamento, use_container_width=True)
+                else:
+                    st.info("Nenhum faturamento projetado ativo encontrado para este mês.")
             else:
-                st.info("Colunas 'Vencimento' ou 'Valor' ausentes na planilha.")
-
-        # NOVO: Seção geográfica integrada dinamicamente por bairro
-        st.markdown("---")
-        st.markdown("### 🗺️ Distribuição Geográfica dos Alunos (Por Bairro)")
-        if "Bairro" in df_ativos.columns:
-            df_bairro = df_ativos["Bairro"].astype(str).str.strip().value_counts().reset_index()
-            df_bairro.columns = ["Bairro", "Quantidade"]
-            df_bairro = df_bairro[df_bairro["Bairro"].str.lower() != "nan"]
-            
-            fig_bairro = px.bar(
-                df_bairro, 
-                x="Bairro", 
-                y="Quantidade",
-                text="Quantidade",
-                labels={'Quantidade': 'Alunos Ativos'},
-                color_discrete_sequence=["#2E5A44"]
-            )
-            fig_bairro.update_traces(textposition="outside")
-            fig_bairro.update_layout(
-                xaxis_title="Bairros de Novo Hamburgo",
-                yaxis_title="Número de Alunos",
-                plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(tickformat="d")
-            )
-            st.plotly_chart(fig_bairro, use_container_width=True)
-        else:
-            st.info("Coluna 'Bairro' não encontrada para mapeamento regional.")
+                st.info("Colunas 'Vencimento' ou 'Valor' não foram localizadas na tabela.")
+    else:
+        st.warning("Nenhum aluno cadastrado para gerar indicadores.")
 
 # --- 7. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela de Preços e Configuração Ouro")
-    st.write("Valores de referência vigentes para contratos estruturais:")
+    st.title("⚙️ Tabela de Preços e Planos")
+    st.info("Gerencie os valores de referência padrão para os planos oferecidos no Studio.")
     
     precos_dados = {
-        "Frequência Semanal": ["1x na Semana", "2x na Semana", "3x na Semana"],
-        "Mensalidade Sugerida": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
-        "Sessões Estimadas (Mês)": [4, 8, 12]
+        "Plano Frequência": ["1x na semana", "2x na semana", "3x na semana"],
+        "Valor Base Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
+        "Descrição Operacional": [
+            "Ideal para manutenção ou atividades complementares.",
+            "Plano padrão recomendado para resultados de evolução contínua.",
+            "Foco intensivo em reabilitação ou performance de condicionamento."
+        ]
     }
     st.table(pd.DataFrame(precos_dados))
 
 # --- 8. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
-    st.title("📁 Alunos Inativos (Arquivo Morto)")
+    st.title("📁 Arquivo Morto (Alunos Inativos)")
     df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"] if "Status" in df_alunos.columns else pd.DataFrame()
     
     if not df_inativos.empty:
-        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
+        st.write(f"Total de registros arquivados: **{len(df_inativos)}**")
+        df_inativos_visivel = df_inativos.copy()
+        if "Valor" in df_inativos_visivel.columns:
+            df_inativos_visivel["Valor"] = df_inativos_visivel["Valor"].apply(formatar_brl)
+        st.dataframe(df_inativos_visivel, use_container_width=True, hide_index=True)
     else:
-        st.info("Nenhum registro inativado na folha de dados.")
+        st.info("Nenhum histórico de aluno inativo arquivado na base de dados.")
 
 # --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Emissão e Impressão de Prontuário de Anamnese")
+    st.title("🖨️ Emissão e Impressão de Prontuários")
+    st.write("Selecione um aluno abaixo para formatar a ficha limpa para impressão física ou PDF.")
     
-    if not df_alunos.empty:
-        aluno_sel = st.selectbox("Selecione o Aluno para visualização oficial:", ["-- Selecione --"] + df_alunos["Nome"].tolist())
+    aluno_print = st.selectbox("Escolha o Prontuário:", ["-- Selecione o Aluno --"] + df_alunos["Nome"].tolist())
+    
+    if aluno_print != "-- Selecione o Aluno --":
+        ficha = df_alunos[df_alunos["Nome"] == aluno_print].iloc[0]
         
-        if aluno_sel != "-- Selecione --":
-            r = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
-            
-            st.markdown("<div class='no-print'>💡 Dica: Use Ctrl+P para salvar em PDF ou imprimir sem menus laterais.</div>", unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div class="print-container" style="border: 1px solid #ccc; padding: 30px; border-radius: 5px; background-color: #fff; color: #000;">
-                <h2 style="text-align: center; color: #2E5A44; margin-bottom: 5px;">HIGHLINE STUDIO DE PILATES</h2>
-                <h4 style="text-align: center; margin-top: 0; font-weight: normal; color: #555;">Ficha de Avaliação e Anamnese Estruturada</h4>
-                <hr style="border-color: #2E5A44;">
-                
-                <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
-                    <tr><td><strong>Nome:</strong> {r.get('Nome','')}</td><td><strong>CPF:</strong> {r.get('CPF','')}</td></tr>
-                    <tr><td><strong>WhatsApp:</strong> {r.get('Telefone','')}</td><td><strong>Nascimento:</strong> {r.get('Nascimento','')}</td></tr>
-                    <tr><td><strong>Gênero:</strong> {r.get('Genero','')}</td><td><strong>Início das Aulas:</strong> {r.get('Inicio_Aulas','')}</td></tr>
-                    <tr><td colspan="2"><strong>Endereço:</strong> {r.get('Endereco', r.get('Bairro',''))}</td></tr>
-                </table>
-                
-                <h3 style="color:#2E5A44; border-bottom: 1px solid #eee; padding-bottom:5px;">📋 Quadro de Queixas Principais</h3>
-                <p style="background: #fdfdfd; padding: 10px; border-left: 3px solid #2E5A44;">{r.get('Queixa','Sem queixas registradas.')}</p>
-                
-                <h3 style="color:#2E5A44; border-bottom: 1px solid #eee; padding-bottom:5px;">🧘 Diretrizes de Conduta e Restrições</h3>
-                <p style="background: #fdfdfd; padding: 10px; border-left: 3px solid #FFD700;">{r.get('Conduta','Sem restrições declaradas.')}</p>
-                
-                <br><br><br>
-                <table style="width:100%; margin-top: 50px;">
-                    <tr>
-                        <td style="text-align: center; width: 45%; border-top: 1px solid #000;"><br>Assinatura do Profissional</td>
-                        <td style="width: 10%;"></td>
-                        <td style="text-align: center; width: 45%; border-top: 1px solid #000;"><br>Assinatura do Aluno</td>
-                    </tr>
-                </table>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown('<div class="print-container" style="border: 1px solid #ccc; padding: 25px; border-radius: 5px;">', unsafe_allow_html=True)
+        st.markdown(f"## HIGHLINE STUDIO DE PILATES - FICHA CLÍNICA")
+        st.markdown(f"**Nome do Paciente/Aluno:** {ficha.get('Nome', 'Não informado')}")
+        st.markdown(f"**Data de Nascimento:** {ficha.get('Nascimento', 'Não informado')} | **Gênero:** {ficha.get('Genero', 'Não informado')}")
+        st.markdown(f"**WhatsApp:** {ficha.get('Telefone', 'Não informado')} | **CPF:** {ficha.get('CPF', 'Não informado')}")
+        st.markdown(f"**Endereço:** {ficha.get('Endereco', 'Não informado')} - {ficha.get('Bairro', 'Não informado')}")
+        st.markdown("---")
+        st.markdown(f"### 📋 Histórico Clínico e Queixas:")
+        st.write(ficha.get('Queixa', 'Nenhuma registrada.'))
+        st.markdown(f"### 🩺 Diretrizes de Conduta e Restrições:")
+        st.write(ficha.get('Conduta', 'Nenhuma restrição registrada.'))
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.button("🖨️ Disparar Impressão da Tela (Ctrl + P)")
