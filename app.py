@@ -53,7 +53,7 @@ try:
     # Inicializa a conexão de leitura/escrita buscando os parâmetros direto do Secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Carrega os dados em tempo real puxando exatamente pelos nomes reais das abas (minúsculas)
+    # Carrega os dados em tempo real puxando apenas pelo nome da worksheet em minúsculas
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
     df_espera = conn.read(worksheet="espera", keep_default_na=False)
@@ -222,7 +222,8 @@ elif menu == "👥 Alunos":
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
-                lista_planos = ["1x semana", "2x semana", "3x semana", "Outro"]
+                # Removido a opção "Outro" também da tela de edição
+                lista_planos = ["1x semana", "2x semana", "3x semana"]
                 plano_atual = dados_atuais.get("Plano", "1x semana")
                 idx_plano = lista_planos.index(plano_atual) if plano_atual in lista_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", lista_planos, index=idx_plano)
@@ -257,10 +258,10 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
-                # Envia e sobrescreve a tabela utilizando o nome correto da aba
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada automaticamente com sucesso!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
+                st.apply_action = True # Flag segura para evitar re-run em loop
                 st.rerun()
                 
             if btn_inativar_alt:
@@ -294,7 +295,8 @@ elif menu == "📝 Cadastro":
     st.subheader("1. Dados Pessoais e de Contrato")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana", "Outro"])
+        # CORREÇÃO: "Outro" removido da lista de planos oficiais
+        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
     with col_p2:
         if plano_c == "1x semana": valor_padrao = "180,00"
         elif plano_c == "2x semana": valor_padrao = "220,00"
@@ -369,7 +371,7 @@ elif menu == "📝 Cadastro":
                     
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     
-                    st.success(f"🎉 {nome_c} foi cadastrado e salvo direto na planilha com sucesso!")
+                    st.success(f"🎉 {nome_c} foi cadastrado com sucesso!")
                     st.cache_data.clear()
                     st.rerun()
 
