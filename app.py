@@ -66,10 +66,8 @@ def formatar_brl(valor):
             val_float = float(valor)
         else:
             val_limpo = str(valor).replace("R$", "").replace(" ", "")
-            # Se tiver vírgula e ponto, tira o ponto (milhar) e troca a vírgula por ponto (decimal)
             if "," in val_limpo and "." in val_limpo:
                 val_limpo = val_limpo.replace(".", "").replace(",", ".")
-            # Se só tiver vírgula, troca por ponto
             elif "," in val_limpo:
                 val_limpo = val_limpo.replace(",", ".")
             val_float = float(val_limpo)
@@ -78,7 +76,6 @@ def formatar_brl(valor):
         return str(valor)
 
 def converter_para_float(valor):
-    """Converte valores da planilha de forma segura para float sem multiplicar por 10"""
     try:
         if pd.isna(valor) or valor == "":
             return 0.0
@@ -113,6 +110,24 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
+    # Tentativa de ler aba de configurações/preços. Se não existir, criaremos uma estrutura padrão.
+    try:
+        df_precos = limpar_dataframe(conn.read(worksheet="precos"))
+    except:
+        df_precos = pd.DataFrame([
+            {"Plano": "1x semana", "Valor": 180.0},
+            {"Plano": "2x semana", "Valor": 220.0},
+            {"Plano": "3x semana", "Valor": 300.0}
+        ])
+
+    # Tratamento de redundância de colunas encontradas na planilha do cliente
+    if df_alunos is not None and not df_alunos.empty:
+        if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
+            df_alunos["Valor"] = df_alunos["Valor Mensal"]
+        elif "Valor Mensal" in df_alunos.columns and "Valor" in df_alunos.columns:
+            # Caso ambas existam, preenche onde estiver nulo para não perder dados
+            df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Mensal"])
+
     if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
         df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
         df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
@@ -120,6 +135,12 @@ try:
     conexao_ok = True
 except Exception as e:
     erro_msg = str(e)
+
+# Mapeamento rápido de preços padrão caso a tabela dinâmica venha vazia
+dict_precos_padrao = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
+if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
+    for _, r in df_precos.iterrows():
+        dict_precos_padrao[str(r["Plano"])] = converter_para_float(r["Valor"])
 
 # ==========================================
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
@@ -215,7 +236,7 @@ if not conexao_ok:
 # ==========================================
 
 # --- 1. TELA: AGENDA ---
-if menu == "📅 Agenda":
+elif menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos")
     hoje_datetime = datetime.now()
     hoje_mm_dd = hoje_datetime.strftime("%m-%d")
@@ -299,7 +320,7 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                valor_sugerido_bruto = dados_atuais.get("Valor", 220)
+                valor_sugerido_bruto = dados_atuais.get("Valor", dict_precos_padrao.get(novo_plano, 220.0))
                 valor_sugerido_float = converter_para_float(valor_sugerido_bruto)
                     
                 novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
@@ -309,7 +330,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
             bloqueio_edicao = False
-            if novos_dias and novo_horario:
+            if novos_dias and Profiler_horario := novo_horario:
                 conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -323,11 +344,12 @@ elif menu == "👥 Alunos":
             
             if btn_salvar_alt and not bloqueio_edicao:
                 idx_inteiro = int(idx_real_planilha)
-                
                 df_alunos["Valor"] = df_alunos["Valor"].astype(object)
                 
                 df_alunos.at[idx_inteiro, "Plano"] = novo_plano
                 df_alunos.at[idx_inteiro, "Valor"] = float(novo_valor)  
+                if "Valor Mensal" in df_alunos.columns:
+                    df_alunos.at[idx_inteiro, "Valor Mensal"] = float(novo_valor)
                 df_alunos.at[idx_inteiro, "Dias"] = novos_dias
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
@@ -368,10 +390,7 @@ elif menu == "📝 Cadastro":
             "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
             "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"
         ]
-        horario_c = st.selectbox(
-            "Horário Escolhido:",
-            ["-- Selecione um Horário --"] + lista_horarios
-        )
+        horario_c = st.selectbox("Horário Escolhido:", ["-- Selecione um Horário --"] + lista_horarios)
         if horario_c == "-- Selecione um Horário --":
             horario_c = ""
         
@@ -390,10 +409,7 @@ elif menu == "📝 Cadastro":
     with col_p1:
         plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
     with col_p2:
-        if plano_c == "1x semana": valor_padrao = 180.0
-        elif plano_c == "2x semana": valor_padrao = 220.0
-        elif plano_c == "3x semana": valor_padrao = 300.0
-        else: valor_padrao = 220.0
+        valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
         valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
 
     with st.form("form_novo_aluno_anamnese_avancada"):
@@ -487,9 +503,10 @@ elif menu == "📝 Cadastro":
                         "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
+                    if "Valor Mensal" in df_alunos.columns:
+                        nova_linha["Valor Mensal"] = float(valor_c)
 
                     df_novo = pd.DataFrame([nova_linha])
-                    
                     df_alunos["Valor"] = df_alunos["Valor"].astype(object)
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
 
@@ -501,7 +518,6 @@ elif menu == "📝 Cadastro":
 # --- 4. TELA: ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
-    
     if df_espera is not None and not df_espera.empty:
         colunas_exibir = [c for c in ["Nome", "Telefone"] if c in df_espera.columns]
         st.dataframe(df_espera[colunas_exibir], use_container_width=True)
@@ -509,18 +525,15 @@ elif menu == "⏳ Espera":
         st.info("Nenhum prospect aguardando na lista.")
         
     st.markdown("---")
-    
     with st.form("form_novo_prospect_original", clear_on_submit=True):
         nome_esp = st.text_input("Nome do Interessado:")
         tel_esp = st.text_input("Telefone de Contato:")
-        
         btn_adicionar_espera = st.form_submit_button("Adicionar à Lista")
         
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
                 nova_linha_espera = {"Nome": nome_esp, "Telefone": tel_esp}
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
-                
                 if df_espera is None or df_espera.empty or "Nome" not in df_espera.columns:
                     df_espera_atualizado = df_novo_esp
                 else:
@@ -530,230 +543,142 @@ elif menu == "⏳ Espera":
                 st.success(f"✅ {nome_esp} adicionado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
-            else:
-                st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO (CORRIGIDA) ---
+# --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
-    
-    total_recebido = 0.0
-    total_pendente = 0.0
+    total_recebido, total_pendente = 0.0, 0.0
     
     if df_financeiro is not None and not df_financeiro.empty:
         if "Status" in df_financeiro.columns and "Valor" in df_financeiro.columns:
-            # CORREÇÃO CRÍTICA AQUI: Usando a função robusta para evitar multiplicação por 10
             df_financeiro["Valor_Num"] = df_financeiro["Valor"].apply(converter_para_float)
-            
             total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor_Num"].sum()
             total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor_Num"].sum()
-            
             if total_recebido == 0.0 and total_pendente == 0.0:
                 total_recebido = df_financeiro["Valor_Num"].sum()
     
     f_col1, f_col2 = st.columns(2)
     with f_col1:
-        st.markdown(
-            f"""
-            <div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #2e7d32; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);">
-                <p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Recebido</p>
-                <h2 style="margin: 5px 0 0 0; color: #2e7d32; font-size: 32px;">{formatar_brl(total_recebido)}</h2>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #2e7d32;"><p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Recebido</p><h2 style="margin: 5px 0 0 0; color: #2e7d32; font-size: 32px;">{formatar_brl(total_recebido)}</h2></div>', unsafe_allow_html=True)
     with f_col2:
-        st.markdown(
-            f"""
-            <div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);">
-                <p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p>
-                <h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2>
-            </div>
-            """, 
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828;"><p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p><h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2></div>', unsafe_allow_html=True)
         
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
-    
-    if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
-        alunos_ativos = df_alunos[df_alunos["Status"].astype(str).str.strip().str.upper() == "ATIVO"]
-        
+    st.markdown("<br>### 📥 Dar Baixa em Pagamentos (Busca Universal)")
+    if df_alunos is not None and not df_alunos.empty:
+        alunos_ativos = df_alunos[df_alunos["Status"].astype(str).str.strip().str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos
         if not alunos_ativos.empty:
-            opcoes_alunos = []
-            for idx, row in alunos_ativos.iterrows():
-                nome_aluno = row.get("Nome", "Desconhecido")
-                val_mensal = row.get("Valor", "0.00")
-                venc_dia = row.get("Vencimento", "-")
-                opcoes_alunos.append(f"{nome_aluno} | Vencimento: dia {venc_dia} (Padrão: {formatar_brl(val_mensal)})")
-                
+            opcoes_alunos = [f"{r.get('Nome')} | Vencimento: dia {r.get('Vencimento','-')} (Padrão: {formatar_brl(r.get('Valor', 0))})" for _, r in alunos_ativos.iterrows()]
             selecionado_baixa_str = st.selectbox("Selecione o aluno para registrar o pagamento:", options=opcoes_alunos)
-            
             nome_filtrado = selecionado_baixa_str.split(" | ")[0]
             aluno_row_dados = alunos_ativos[alunos_ativos["Nome"] == nome_filtrado].iloc[0]
             
             col_b1, col_b2, col_b3 = st.columns(3)
             with col_b1:
-                val_sugerido = converter_para_float(aluno_row_dados.get("Valor", 0))
-                valor_entrada = st.number_input("Confirmar Valor Pago (R$):", value=val_sugerido, step=10.0)
+                valor_entrada = st.number_input("Confirmar Valor Pago (R$):", value=converter_para_float(aluno_row_dados.get("Valor", 0)), step=10.0)
             with col_b2:
                 forma_pagto = st.selectbox("Forma de Pagamento:", ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
             with col_b3:
                 categoria_pagto = st.selectbox("Categoria do Lançamento:", ["Mensalidade", "Aula Avulsa", "Avaliação", "Outros"])
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
-                # CORREÇÃO AQUI: Gravando explicitamente a data de hoje ao registrar o recebimento
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                
-                nova_linha_financeiro = {
-                    "Aluno": nome_filtrado,
-                    "Valor": float(valor_entrada),
-                    "Data": data_registro,
-                    "Forma": forma_pagto,
-                    "Categoria": categoria_pagto,
-                    "Status": "Pago"
-                }
-                
-                df_novo_lancamento = pd.DataFrame([nova_linha_financeiro])
-                
-                if "Valor_Num" in df_financeiro.columns:
-                    df_financeiro.drop(columns=["Valor_Num"], inplace=True)
-                    
-                df_financeiro_atualizado = pd.concat([df_financeiro, df_novo_lancamento], ignore_index=True)
-                
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
+                df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
-                st.success(f"✅ Pagamento de {formatar_brl(valor_entrada)} registrado com sucesso para {nome_filtrado} no dia {data_registro}!")
+                st.success(f"✅ Pagamento registrado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
-        else:
-            st.info("Nenhum aluno com status 'Ativo' foi localizado na base para recebimento.")
-    else:
-        st.error("Estrutura da aba 'alunos' indisponível ou sem coluna de status.")
-            
-    st.markdown("<br><hr>", unsafe_allow_html=True)
-    st.markdown("### 📋 Histórico Geral de Transações")
+
+    st.markdown("<br>### 📋 Histórico Geral de Transações")
     if df_financeiro is not None and not df_financeiro.empty:
-        colunas_exibir_fin = [c for c in df_financeiro.columns if c != "Valor_Num"]
-        
-        df_financeiro_visivel = df_financeiro[colunas_exibir_fin].copy()
-        if "Valor" in df_financeiro_visivel.columns:
-            df_financeiro_visivel["Valor"] = df_financeiro_visivel["Valor"].apply(formatar_brl)
-            
+        df_financeiro_visivel = df_financeiro[[c for c in df_financeiro.columns if c != "Valor_Num"]].copy()
+        if "Valor" in df_financeiro_visivel.columns: df_financeiro_visivel["Valor"] = df_financeiro_visivel["Valor"].apply(formatar_brl)
         st.dataframe(df_financeiro_visivel, use_container_width=True, hide_index=True)
-    else:
-        st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
 # --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
-
     if not df_ativos.empty:
         g_col1, g_col2 = st.columns(2)
-        
         with g_col1:
             st.markdown("### Alunos por Tipo de Plano")
             if "Plano" in df_ativos.columns:
                 df_planos = df_ativos["Plano"].value_counts().reset_index()
                 df_planos.columns = ["Plano", "Quantidade"]
-                fig_planos = px.bar(
-                    df_planos, 
-                    y="Plano", 
-                    x="Quantidade", 
-                    orientation="h",
-                    text="Quantidade",
-                    color_discrete_sequence=["#2E5A44"]
-                )
-                fig_planos.update_traces(textposition="auto")
+                fig_planos = px.bar(df_planos, y="Plano", x="Quantidade", orientation="h", text="Quantidade", color_discrete_sequence=["#2E5A44"])
                 fig_planos.update_layout(xaxis_title="Número de Alunos", yaxis_title="Plano", plot_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_planos, use_container_width=True)
-            else:
-                st.info("Coluna 'Plano' não encontrada na planilha.")
-
         with g_col2:
             st.markdown("### Distribuição por Gênero")
             if "Genero" in df_ativos.columns:
-                df_gen = df_ativos["Genero"].value_counts().reset_index()
-                df_gen.columns = ["Gênero", "Quantidade"]
-                fig_pizza = px.pie(
-                    df_gen, 
-                    names="Gênero", 
-                    values="Quantidade", 
-                    hole=0.3, 
-                    color_discrete_sequence=["#2E5A44", "#FFD700"]
-                )
-                st.plotly_chart(fig_pizza, use_container_width=True)
-            else:
-                st.info("Coluna 'Genero' não encontrada na planilha.")
-
+                st.plotly_chart(px.pie(df_ativos["Genero"].value_counts().reset_index(), names="Genero", values="count", hole=0.3, color_discrete_sequence=["#2E5A44", "#FFD700"]), use_container_width=True)
+        
         st.markdown("---")
         g_col3, g_col4 = st.columns(2)
-
         with g_col3:
             st.markdown("### Perfil de Alunos por Faixa Etária")
             if "Nascimento" in df_ativos.columns:
-                idades = []
-                ano_atual = datetime.now().year
-                for nasc in df_ativos["Nascimento"]:
-                    try:
-                        ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
-                        idades.append(ano_atual - ano_nasc)
-                    except:
-                        continue
+                idades = [datetime.now().year - pd.to_datetime(n, dayfirst=True).year for n in df_ativos["Nascimento"] if not pd.isna(n)]
                 if idades:
-                    df_idades = pd.DataFrame({"Idade": idades})
-                    bins = [0, 25, 35, 45, 55, 65, 120]
-                    labels = ["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]
-                    df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
-                    df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
-                    df_faixas.columns = ["Faixa Etária", "Alunos"]
-                    
-                    fig_idades = px.bar(
-                        df_faixas, 
-                        x="Faixa Etária", 
-                        y="Alunos", 
-                        text="Alunos", 
-                        color_discrete_sequence=["#2E5A44"]
-                    )
-                    fig_idades.update_traces(textposition="outside")
-                    fig_idades.update_layout(plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(tickformat="d"))
-                    st.plotly_chart(fig_idades, use_container_width=True)
-                else:
-                    st.info("Nenhuma data de nascimento válida para calcular as idades.")
-            else:
-                st.info("Coluna 'Nascimento' não encontrada na planilha.")
-
+                    df_faixas = pd.cut(pd.DataFrame({"Idade": idades})["Idade"], bins=[0, 25, 35, 45, 55, 65, 120], labels=["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]).value_counts().reset_index()
+                    st.plotly_chart(px.bar(df_faixas, x="Idade", y="count", text="count", color_discrete_sequence=["#2E5A44"]).update_layout(plot_bgcolor="rgba(0,0,0,0)"), use_container_width=True)
         with g_col4:
             st.markdown("### Faturamento Projetado por Dia do Mês")
             if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
-                for idx, row in df_ativos.iterrows():
-                    try:
-                        venc = int(row["Vencimento"])
-                        val_bruto = row["Valor"]
-                        val_f = converter_para_float(val_bruto)
-                        if 1 <= venc <= 31:
-                            faturamento_por_dia[venc] += val_f
-                    except:
-                        continue
-                
-                df_fat = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
-                fig_fat = px.line(
-                    df_fat, 
-                    x="Dia do Vencimento", 
-                    y="Faturamento Projetado", 
-                    markers=True, 
-                    color_discrete_sequence=["#2E5A44"]
-                )
-                fig_fat.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=1))
-                st.plotly_chart(fig_fat, use_container_width=True)
-            else:
-                st.info("Colunas de Vencimento ou Valor indisponíveis para cálculo de projeção.")
-    else:
-        st.info("Nenhum dado ativo disponível para renderização de indicadores.")
+                for _, row in df_ativos.iterrows():
+                    try: faturamento_por_dia[int(row["Vencimento"])] += converter_para_float(row["Valor"])
+                    except: continue
+                st.plotly_chart(px.line(pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento"]), x="Dia do Vencimento", y="Faturamento", markers=True, color_discrete_sequence=["#2E5A44"]).update_layout(plot_bgcolor="rgba(0,0,0,0)"), use_container_width=True)
 
-# --- TRATAMENTO ELEMENTAR DE MENUS INCOMPLETOS DO ARQUIVO FONTE ---
+# ==========================================
+# ⚙️ 5. NOVA TELA DE PREÇOS RESTABELECIDA
+# ==========================================
+elif menu == "⚙️ Preços":
+    st.title("⚙️ Configuração Geral de Preços dos Pacotes")
+    st.markdown("Gerencie aqui os valores padrão sugeridos no momento de realizar novos cadastros e contratos de planos.")
+
+    st.markdown("### 💰 Valores Atuais dos Planos")
+    
+    # Criar cards visuais para os preços vigentes
+    c_p1, c_p2, c_p3 = st.columns(3)
+    with c_p1:
+        st.markdown(f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-top: 5px solid #2E5A44; text-align: center;"><p style="margin:0; font-weight: bold; color: #555;">Plano 1x na Semana</p><h2 style="color: #2E5A44; margin: 10px 0;">{formatar_brl(dict_precos_padrao.get("1x semana", 180.0))}</h2></div>', unsafe_allow_html=True)
+    with c_p2:
+        st.markdown(f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-top: 5px solid #2E5A44; text-align: center;"><p style="margin:0; font-weight: bold; color: #555;">Plano 2x na Semana</p><h2 style="color: #2E5A44; margin: 10px 0;">{formatar_brl(dict_precos_padrao.get("2x semana", 220.0))}</h2></div>', unsafe_allow_html=True)
+    with c_p3:
+        st.markdown(f'<div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border-top: 5px solid #2E5A44; text-align: center;"><p style="margin:0; font-weight: bold; color: #555;">Plano 3x na Semana</p><h2 style="color: #2E5A44; margin: 10px 0;">{formatar_brl(dict_precos_padrao.get("3x semana", 300.0))}</h2></div>', unsafe_allow_html=True)
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.subheader("📝 Atualizar Tabela de Valores")
+    
+    with st.form("form_ajuste_precos"):
+        st.markdown("Altere os campos abaixo para atualizar o valor global sugerido para cada um dos pacotes:")
+        
+        novo_v1 = st.number_input("Novo Valor - 1x na Semana (R$):", value=float(dict_precos_padrao.get("1x semana", 180.0)), step=5.0)
+        novo_v2 = st.number_input("Novo Valor - 2x na Semana (R$):", value=float(dict_precos_padrao.get("2x semana", 220.0)), step=5.0)
+        novo_v3 = st.number_input("Novo Valor - 3x na Semana (R$):", value=float(dict_precos_padrao.get("3x semana", 300.0)), step=5.0)
+        
+        btn_salvar_precos = st.form_submit_button("💾 Atualizar Valores Globais")
+        
+        if btn_salvar_precos:
+            df_novos_precos = pd.DataFrame([
+                {"Plano": "1x semana", "Valor": float(novo_v1)},
+                {"Plano": "2x semana", "Valor": float(novo_v2)},
+                {"Plano": "3x semana", "Valor": float(novo_v3)}
+            ])
+            
+            try:
+                conn.update(worksheet="precos", data=df_novos_precos)
+                st.success("🎉 Tabela de preços atualizada com sucesso no banco de dados!")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar na planilha. Certifique-se de que a aba chamada 'precos' (tudo minúsculo e sem acento) existe no seu Google Sheets. Detalhe: {e}")
+
+# --- TRATAMENTO ELEMENTAR DE OUTROS MENUS ---
 else:
     st.title(f"{menu}")
     st.info("Esta seção encontra-se ativa em banco de dados e pronta para customização de layout de saída.")
