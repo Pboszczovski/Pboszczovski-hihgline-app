@@ -235,10 +235,10 @@ elif menu == "👥 Alunos":
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
-                lista_planos = ["1x semana", "2x semana", "3x semana"]
+                options_planos = ["1x semana", "2x semana", "3x semana"]
                 plano_atual = dados_atuais.get("Plano", "1x semana")
-                idx_plano = lista_planos.index(plano_atual) if plano_atual in lista_planos else 0
-                novo_plano = st.selectbox("Novo Plano Contratado:", lista_planos, index=idx_plano)
+                idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
+                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
                 valor_sugerido = dados_atuais.get("Valor", "220,00")
                 if novo_plano == "1x semana": valor_sugerido = "180,00"
@@ -289,7 +289,7 @@ elif menu == "👥 Alunos":
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    st.subheader("📌 Planejamento de Dias e Horários")
+    st.subheader("📌 Personalização de Horários")
     col_dias, col_hora = st.columns(2)
     with col_dias: dias_c = st.text_input("Dias de Aula Desejados (Ex: Ter/Qui):")
     with col_hora: horario_c = st.text_input("Horário Escolhido (Ex: 08:30):")
@@ -377,14 +377,12 @@ elif menu == "📝 Cadastro":
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
                     
-                    # Garante gravação correta tanto se a coluna na planilha possuir acento ou não
                     if "Horário" in df_alunos.columns:
                         nova_linha["Horário"] = horario_c
 
                     df_novo = pd.DataFrame([nova_linha])
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
                     
-                    # Remove coluna fantasma de controle se houver antes de salvar
                     if "Horario" in df_alunos_atualizado.columns and "Horário" in df_alunos.columns:
                         df_alunos_atualizado = df_alunos_atualizado.drop(columns=["Horario"])
 
@@ -484,7 +482,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                 st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            st.markdown(f"""
+            conteudo_html = f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
                     <h1 style="color: #2E5A44; margin: 0;">STUDIO HIGHLINE</h1>
@@ -518,4 +516,5 @@ elif menu == "🖨️ Imprimir Prontuário":
                     </tr>
                 </table>
             </div>
-            """, unsafe_allow_html=True)
+            """
+            st.markdown(conteudo_html, unsafe_allow_html=True)
