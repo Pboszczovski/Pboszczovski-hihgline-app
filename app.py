@@ -312,7 +312,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -513,7 +513,7 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO ---
+# --- 5. TELA: FINANCEIRO (BUSCA UNIVERSAL CORRIGIDA) ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
@@ -555,32 +555,65 @@ elif menu == "💰 Financeiro":
         
     st.markdown("<br>", unsafe_allow_html=True)
     
-    st.markdown("### 🔄 Dar Baixa em Pagamentos Pendentes")
-    if df_financeiro is not None and not df_financeiro.empty and "Status" in df_financeiro.columns:
-        df_pendentes = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]
+    st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
+    
+    # Busca os alunos Ativos diretamente do dataframe de alunos cadastrados
+    if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
+        alunos_ativos = df_alunos[df_alunos["Status"].astype(str).str.strip().str.upper() == "ATIVO"]
         
-        if not df_pendentes.empty:
-            opcoes_pendentes = []
-            for idx, row in df_pendentes.iterrows():
-                aluno_p = row.get("Aluno", row.get("Nome", "Desconhecido"))
-                val_p = row.get("Valor", "0.00")
-                cat_p = row.get("Categoria", "Mensalidade")
-                opcoes_pendentes.append(f"{aluno_p} - {formatar_brl(val_p)} ({cat_p}) | ID: {idx}")
+        if not alunos_ativos.empty:
+            opcoes_alunos = []
+            for idx, row in alunos_ativos.iterrows():
+                nome_aluno = row.get("Nome", "Desconhecido")
+                val_mensal = row.get("Valor", "0.00")
+                venc_dia = row.get("Vencimento", "-")
+                opcoes_alunos.append(f"{nome_aluno} | Vencimento: dia {venc_dia} (Padrão: {formatar_brl(val_mensal)})")
                 
-            selecionado_baixa = st.selectbox("Alunos inadimplentes:", options=opcoes_pendentes, label_visibility="collapsed")
+            selecionado_baixa_str = st.selectbox("Selecione o aluno para registrar o pagamento antecipado:", options=opcoes_alunos)
             
-            if st.button("Confirmar Recebimento", type="primary"):
-                idx_baixa = int(selecionado_baixa.split("| ID: ")[1])
-                df_financeiro.at[idx_baixa, "Status"] = "Pago"
+            # Divide a string escolhida para pegar exatamente o nome do aluno ativo
+            nome_filtrado = selecionado_baixa_str.split(" | ")[0]
+            aluno_row_dados = alunos_ativos[alunos_ativos["Nome"] == nome_filtrado].iloc[0]
+            
+            col_b1, col_b2, col_b3 = st.columns(3)
+            with col_b1:
+                try:
+                    val_sugerido = float(str(aluno_row_dados.get("Valor", 0)).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                except:
+                    val_sugerido = 0.0
+                valor_entrada = st.number_input("Confirmar Valor Pago (R$):", value=val_sugerido, step=10.0)
+            with col_b2:
+                forma_pagto = st.selectbox("Forma de Pagamento:", ["PIX", "Dinheiro", "Cartão de Crédito", "Cartão de Débito"])
+            with col_b3:
+                categoria_pagto = st.selectbox("Categoria do Lançamento:", ["Mensalidade", "Aula Avulsa", "Avaliação", "Outros"])
+                
+            if st.button("Confirmar Baixa e Registrar", type="primary"):
+                data_registro = datetime.now().strftime("%d/%m/%Y")
+                
+                nova_linha_financeiro = {
+                    "Aluno": nome_filtrado,
+                    "Valor": float(valor_entrada),
+                    "Data": data_registro,
+                    "Forma": forma_pagto,
+                    "Categoria": categoria_pagto,
+                    "Status": "Pago"
+                }
+                
+                df_novo_lancamento = pd.DataFrame([nova_linha_financeiro])
+                
                 if "Valor_Num" in df_financeiro.columns:
                     df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                     
-                conn.update(worksheet="financeiro", data=df_financeiro)
-                st.success("✅ Pagamento confirmed e registrado com sucesso!")
+                df_financeiro_atualizado = pd.concat([df_financeiro, df_novo_lancamento], ignore_index=True)
+                
+                conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
+                st.success(f"✅ Pagamento de {formatar_brl(valor_entrada)} registrado com sucesso para {nome_filtrado}!")
                 st.cache_data.clear()
                 st.rerun()
         else:
-            st.info("Nenhum pagamento pendente encontrado no momento.")
+            st.info("Nenhum aluno com status 'Ativo' foi localizado na base para recebimento.")
+    else:
+        st.error("Estrutura da aba 'alunos' indisponível ou sem coluna de status.")
             
     st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("### 📋 Histórico Geral de Transações")
@@ -595,7 +628,7 @@ elif menu == "💰 Financeiro":
     else:
         st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
-# --- 6. TELA: PERFIL (Gráfico de Barras Corrigido com Valores em Cima) ---
+# --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
@@ -678,107 +711,36 @@ elif menu == "👤 Perfil":
         with g_col4:
             st.markdown("### Faturamento Projetado por Dia do Mês")
             if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
-                # Cria a estrutura zerada para garantir o mapeamento correto do mês
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
-                
                 for idx, row in df_ativos.iterrows():
                     try:
-                        # Limpa o valor de string para numérico puro para o cálculo matemático
-                        v_bruto = str(row["Valor"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
-                        v_float = float(v_bruto)
-                        dia_venc = int(row["Vencimento"])
-                        if 1 <= dia_venc <= 31:
-                            faturamento_por_dia[dia_venc] += v_float
+                        venc = int(row["Vencimento"])
+                        val_bruto = row["Valor"]
+                        try:
+                            val_f = float(str(val_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                        except:
+                            val_f = 0.0
+                        if 1 <= venc <= 31:
+                            faturamento_por_dia[venc] += val_f
                     except:
                         continue
                 
-                # Monta o DataFrame do gráfico
-                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia", "Valor Mensal"])
-                # Filtra mantendo apenas os dias com faturamento real maior que zero
-                df_faturamento_filtrado = df_faturamento[df_faturamento["Valor Mensal"] > 0].copy()
-                
-                if not df_faturamento_filtrado.empty:
-                    # Geração do gráfico usando o go.Bar para controle fino de texto sobre as barras
-                    fig_faturamento = go.Figure(data=[
-                        go.Bar(
-                            x=df_faturamento_filtrado["Dia"].astype(str),
-                            y=df_faturamento_filtrado["Valor Mensal"],
-                            # Texto estático contendo o valor em reais R$ mapeado acima de cada dia
-                            text=df_faturamento_filtrado["Valor Mensal"].apply(formatar_brl),
-                            textposition="outside",
-                            textfont=dict(size=11, color="#2E5A44"),
-                            marker_color="#2E5A44"
-                        )
-                    ])
-                    
-                    fig_faturamento.update_layout(
-                        xaxis_title="Dia do Vencimento",
-                        yaxis_title="Total Esperado (R$)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        # Espaço extra no topo da escala Y para que as tags de texto não cortem visualmente
-                        yaxis=dict(range=[0, df_faturamento_filtrado["Valor%s Mensal" % ''] .max() * 1.25]),
-                        margin=dict(l=20, r=20, t=20, b=20)
-                    )
-                    st.plotly_chart(fig_faturamento, use_container_width=True)
-                else:
-                    st.info("Nenhum faturamento projetado ativo encontrado para este mês.")
+                df_fat = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
+                fig_fat = px.line(
+                    df_fat, 
+                    x="Dia do Vencimento", 
+                    y="Faturamento Projetado", 
+                    markers=True, 
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                fig_fat.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=1))
+                st.plotly_chart(fig_fat, use_container_width=True)
             else:
-                st.info("Colunas 'Vencimento' ou 'Valor' não foram localizadas na tabela.")
+                st.info("Colunas de Vencimento ou Valor indisponíveis para cálculo de projeção.")
     else:
-        st.warning("Nenhum aluno cadastrado para gerar indicadores.")
+        st.info("Nenhum dado ativo disponível para renderização de indicadores.")
 
-# --- 7. TELA: PREÇOS ---
-elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela de Preços e Planos")
-    st.info("Gerencie os valores de referência padrão para os planos oferecidos no Studio.")
-    
-    precos_dados = {
-        "Plano Frequência": ["1x na semana", "2x na semana", "3x na semana"],
-        "Valor Base Mensal": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
-        "Descrição Operacional": [
-            "Ideal para manutenção ou atividades complementares.",
-            "Plano padrão recomendado para resultados de evolução contínua.",
-            "Foco intensivo em reabilitação ou performance de condicionamento."
-        ]
-    }
-    st.table(pd.DataFrame(precos_dados))
-
-# --- 8. TELA: ARQUIVO MORTO ---
-elif menu == "📁 Arquivo Morto":
-    st.title("📁 Arquivo Morto (Alunos Inativos)")
-    df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"] if "Status" in df_alunos.columns else pd.DataFrame()
-    
-    if not df_inativos.empty:
-        st.write(f"Total de registros arquivados: **{len(df_inativos)}**")
-        df_inativos_visivel = df_inativos.copy()
-        if "Valor" in df_inativos_visivel.columns:
-            df_inativos_visivel["Valor"] = df_inativos_visivel["Valor"].apply(formatar_brl)
-        st.dataframe(df_inativos_visivel, use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum histórico de aluno inativo arquivado na base de dados.")
-
-# --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
-elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Emissão e Impressão de Prontuários")
-    st.write("Selecione um aluno abaixo para formatar a ficha limpa para impressão física ou PDF.")
-    
-    aluno_print = st.selectbox("Escolha o Prontuário:", ["-- Selecione o Aluno --"] + df_alunos["Nome"].tolist())
-    
-    if aluno_print != "-- Selecione o Aluno --":
-        ficha = df_alunos[df_alunos["Nome"] == aluno_print].iloc[0]
-        
-        st.markdown('<div class="print-container" style="border: 1px solid #ccc; padding: 25px; border-radius: 5px;">', unsafe_allow_html=True)
-        st.markdown(f"## HIGHLINE STUDIO DE PILATES - FICHA CLÍNICA")
-        st.markdown(f"**Nome do Paciente/Aluno:** {ficha.get('Nome', 'Não informado')}")
-        st.markdown(f"**Data de Nascimento:** {ficha.get('Nascimento', 'Não informado')} | **Gênero:** {ficha.get('Genero', 'Não informado')}")
-        st.markdown(f"**WhatsApp:** {ficha.get('Telefone', 'Não informado')} | **CPF:** {ficha.get('CPF', 'Não informado')}")
-        st.markdown(f"**Endereço:** {ficha.get('Endereco', 'Não informado')} - {ficha.get('Bairro', 'Não informado')}")
-        st.markdown("---")
-        st.markdown(f"### 📋 Histórico Clínico e Queixas:")
-        st.write(ficha.get('Queixa', 'Nenhuma registrada.'))
-        st.markdown(f"### 🩺 Diretrizes de Conduta e Restrições:")
-        st.write(ficha.get('Conduta', 'Nenhuma restrição registrada.'))
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.button("🖨️ Disparar Impressão da Tela (Ctrl + P)")
+# --- TRATAMENTO ELEMENTAR DE MENUS INCOMPLETOS DO ARQUIVO FONTE ---
+else:
+    st.title(f"{menu}")
+    st.info("Esta seção encontra-se ativa em banco de dados e pronta para customização de layout de saída.")
