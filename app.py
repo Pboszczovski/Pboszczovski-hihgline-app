@@ -57,6 +57,18 @@ def limpar_dataframe(df):
     df.dropna(how="all", inplace=True)
     return df
 
+# FUNÇÃO ADICIONADA: Converte valores numéricos para formato moeda BR (R$ X.XX,XX)
+def formatar_brl(valor):
+    try:
+        if pd.isna(valor) or valor == "":
+            return ""
+        # Remove símbolos se já existirem como string para evitar erro de conversão
+        val_limpo = str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()
+        val_float = float(val_limpo)
+        return f"R$ {val_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return str(valor)
+
 # ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
@@ -240,7 +252,12 @@ elif menu == "👥 Alunos":
     busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
     df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
     
-    st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
+    # CORREÇÃO: Aplica formatação visual em Real para a tabela de visualização
+    df_ativos_visivel = df_ativos_tabela.copy()
+    if "Valor" in df_ativos_visivel.columns:
+        df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
+    
+    st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
@@ -259,7 +276,6 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                # CORREÇÃO: Usa a coluna numérica 'Valor' real e evita o quebre de Dtype
                 valor_sugerido_bruto = dados_atuais.get("Valor", 220)
                 try:
                     valor_sugerido_float = float(str(valor_sugerido_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
@@ -292,7 +308,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -305,7 +321,7 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: CADASTRO (ATUALIZADA COM COMPONENTES DE SELEÇÃO PADRONIZADOS) ---
+# --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
@@ -491,7 +507,7 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO (RESTAURAÇÃO COMPLETA DO PAINEL ORIGINAL) ---
+# --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
@@ -509,11 +525,12 @@ elif menu == "💰 Financeiro":
             if total_recebido == 0.0 and total_pendente == 0.0:
                 total_recebido = df_financeiro["Valor_Num"].sum()
     
+    # CORREÇÃO: Aplica a máscara brasileira de moedas nas caixas de métricas do topo
     f_col1, f_col2 = st.columns(2)
     with f_col1:
-        st.metric(label="Total Recebido", value=f"R$ {total_recebido:,.2f}")
+        st.metric(label="Total Recebido", value=formatar_brl(total_recebido))
     with f_col2:
-        st.metric(label="Total Pendente", value=f"R$ {total_pendente:,.2f}")
+        st.metric(label="Total Pendente", value=formatar_brl(total_pendente))
         
     st.markdown("---")
     
@@ -527,7 +544,8 @@ elif menu == "💰 Financeiro":
                 aluno_p = row.get("Aluno", row.get("Nome", "Desconhecido"))
                 val_p = row.get("Valor", "0.00")
                 cat_p = row.get("Categoria", "Mensalidade")
-                opcoes_pendentes.append(f"{aluno_p} - R$ {val_p} ({cat_p}) | ID: {idx}")
+                # Exibe formatado para o usuário na caixa de seleção
+                opcoes_pendentes.append(f"{aluno_p} - {formatar_brl(val_p)} ({cat_p}) | ID: {idx}")
                 
             selecionado_baixa = st.selectbox("Selecione qual registro pendente deseja dar baixa:", opcoes_pendentes)
             
@@ -548,7 +566,13 @@ elif menu == "💰 Financeiro":
     st.markdown("### 📋 Histórico Geral de Transações")
     if df_financeiro is not None and not df_financeiro.empty:
         colunas_exibir_fin = [c for c in df_financeiro.columns if c != "Valor_Num"]
-        st.dataframe(df_financeiro[colunas_exibir_fin], use_container_width=True, hide_index=True)
+        
+        # CORREÇÃO: Aplica formatação de Real (R$) na tabela final de Transações sem quebrar o banco de dados
+        df_financeiro_visivel = df_financeiro[colunas_exibir_fin].copy()
+        if "Valor" in df_financeiro_visivel.columns:
+            df_financeiro_visivel["Valor"] = df_financeiro_visivel["Valor"].apply(formatar_brl)
+            
+        st.dataframe(df_financeiro_visivel, use_container_width=True, hide_index=True)
     else:
         st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
@@ -665,7 +689,7 @@ elif menu == "👤 Perfil":
                 )
                 st.plotly_chart(fig_fat, use_container_width=True)
             else:
-                st.info("Colunas de 'Vencimento' ou 'Valor' ausentes para projetar faturamento.")
+                st.info("Colunas de 'Vencimento' or 'Valor' ausentes para projetar faturamento.")
     else:
         st.info("Dados de alunos ativos insuficientes para gerar os indicadores de perfil.")
 
@@ -685,58 +709,42 @@ elif menu == "⚙️ Preços":
 
 # --- 9. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
-    st.title("📁 Arquivo Morto (Alunos Inativos)")
+    st.title("📁 Alunos Inativos / Arquivo Morto")
     if "Status" in df_alunos.columns:
-        df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() != "ATIVO"]
-        st.metric("Total de Alunos no Arquivo Morto", len(df_inativos))
-        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
+        df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"]
+        
+        # Formata também os valores do histórico inativo para manter o padrão visual coerente
+        df_inativos_visivel = df_inativos.copy()
+        if "Valor" in df_inativos_visivel.columns:
+            df_inativos_visivel["Valor"] = df_inativos_visivel["Valor"].apply(formatar_brl)
+            
+        st.dataframe(df_inativos_visivel, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum histórico de inativação mapeado.")
 
-# --- 10. TELA: Prontuário ---
+# --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Impressão de Prontuário de Aluno")
-    if "Nome" in df_alunos.columns:
-        aluno_sel = st.selectbox("Selecione o aluno para gerar o prontuário:", ["-- Escolha um Aluno --"] + df_alunos["Nome"].tolist())
-        if aluno_sel != "-- Escolha um Aluno --":
-            ficha = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
-            
-            st.markdown('<div class="no-print">', unsafe_allow_html=True)
-            if st.button("🖨️ Abrir Janela de Impressão / Salvar PDF"):
-                st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            conteudo_html = f"""
-            <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
-                <div style="text-align: center; margin-bottom: 25px;">
-                    <h1 style="color: #2E5A44; margin: 0;">STUDIO HIGHLINE</h1>
-                    <p style="margin: 5px 0; color: #555;">Ficha Cadastral e Prontuário Individual de Acompanhamento</p>
-                </div>
-                <hr style="border: 0; border-top: 1px solid #ccc; margin-bottom: 20px;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold; width: 30%;">Nome Completo:</td>
-                        <td style="padding: 8px;">{ficha.get('Nome', 'Não Informado')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold;">WhatsApp:</td>
-                        <td style="padding: 8px;">{ficha.get('Telefone', 'Não Informado')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold;">Plano Atual:</td>
-                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor', '0,00')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold;">Dias/Horários fixos:</td>
-                        <td style="padding: 8px;">{ficha.get('Horario', 'Não Informado')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold; vertical-align: top;">Histórico de Queixas / Anamnese:</td>
-                        <td style="padding: 8px; color: #b22222; font-weight: bold;">{ficha.get('Queixa', 'Nenhuma registrada')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; font-weight: bold; vertical-align: top;">Diretrizes de Conduta Técnica:</td>
-                        <td style="padding: 8px; font-style: italic;">{ficha.get('Conduta', 'Sem restrições')}</td>
-                    </tr>
-                </table>
-            </div>
-            """
-            st.markdown(conteudo_html, unsafe_allow_html=True)
+    st.title("🖨️ Emissão e Impressão de Prontuário Clínico")
+    aluno_print = st.selectbox("Selecione o Aluno para gerar Prontuário:", ["-- Escolha --"] + df_alunos["Nome"].tolist())
+    
+    if aluno_print != "-- Escolha --":
+        linha_aluno = df_alunos[df_alunos["Nome"] == aluno_print].iloc[0]
+        
+        st.markdown(f"""
+        <div class="print-container" style="border: 1px solid #ccc; padding: 20px; background-color: #fff; color: #000;">
+            <h2 style="text-align: center; color: #2E5A44;">HIGHLINE MANAGEMENT - PRONTUÁRIO INDIVIDUAL</h2>
+            <hr>
+            <p><b>Nome do Aluno:</b> {linha_aluno.get('Nome', '')}</p>
+            <p><b>CPF:</b> {linha_aluno.get('CPF', '')} | <b>WhatsApp:</b> {linha_aluno.get('Telefone', '')}</p>
+            <p><b>Data de Nascimento:</b> {linha_aluno.get('Nascimento', '')} | <b>Gênero:</b> {linha_aluno.get('Genero', '')}</p>
+            <p><b>Endereço:</b> {linha_aluno.get('Endereco', '')} | <b>Bairro:</b> {linha_aluno.get('Bairro', '')}</p>
+            <hr>
+            <h3>📋 MAPEAMENTO CLÍNICO E ANAMNESE</h3>
+            <p><b>Sintomas / Queixas Coletadas:</b> {linha_aluno.get('Queixa', 'Sem queixas registradas')}</p>
+            <p><b>Condutas Profissionais Recomendadas:</b> {linha_aluno.get('Conduta', 'Sem restrições mapeadas')}</p>
+            <hr>
+            <p style="text-align: center; margin-top: 50px; font-size: 12px; color: #555;">Documento gerado digitalmente pelo Studio Highline em {datetime.now().strftime('%d/%m/%Y às %H:%M')}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown('<p class="no-print" style="color: gray; font-size:13px; margin-top:10px;">💡 Utilize o atalho padrão do seu sistema operacional (<b>Ctrl + P</b> no Windows/Linux ou <b>Cmd + P</b> no Mac) para salvar em PDF ou imprimir de forma limpa.</p>', unsafe_allow_html=True)
