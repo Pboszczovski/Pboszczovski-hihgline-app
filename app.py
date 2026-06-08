@@ -50,12 +50,12 @@ st.markdown("""
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
 try:
-    # Inicializa a conexão de leitura/escrita usando os Secrets configurados
+    # Inicializa a conexão de leitura/escrita buscando os parâmetros direto do Secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Carrega os dados em tempo real de cada aba
-    df_alunos = conn.read(spreadsheet="130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw", worksheet="Alunos")
-    df_financeiro = conn.read(spreadsheet="130igffmPV0Eu8qzEpQC3g1ReKbb2lO01iZgWXSzFRhw", worksheet="Financeiro")
+    # Carrega os dados em tempo real puxando apenas pelo nome da worksheet
+    df_alunos = conn.read(worksheet="Alunos")
+    df_financeiro = conn.read(worksheet="Financeiro")
     df_espera = conn.read(worksheet="Lista de Espera", keep_default_na=False)
     conexao_ok = True
 except Exception as e:
@@ -259,7 +259,7 @@ elif menu == "👥 Alunos":
                 
                 # Envia e sobrescreve a tabela no Sheets automaticamente
                 conn.update(worksheet="Alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada automaticamente com sucesso!")
+                st.success("🎉 Planilha updated automaticamente com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -296,7 +296,6 @@ elif menu == "📝 Cadastro":
     with col_p1:
         plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana", "Outro"])
     with col_p2:
-        # Correspondência automática de valor com base no plano
         if plano_c == "1x semana": valor_padrao = "180,00"
         elif plano_c == "2x semana": valor_padrao = "220,00"
         elif plano_c == "3x semana": valor_padrao = "300,00"
@@ -309,7 +308,6 @@ elif menu == "📝 Cadastro":
         with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
         with col_id2: cpf_c = st.text_input("CPF:")
         
-        # Estrutura com Bairro, Endereço e o novo campo de Complemento
         col_end1, col_end2, col_end3 = st.columns([1, 2, 1])
         with col_end1: bairro_c = st.text_input("Bairro:")
         with col_end2: endereco_base = st.text_input("Endereço (Rua, Número, etc.):")
@@ -356,10 +354,8 @@ elif menu == "📝 Cadastro":
                     if queixa_extra: checkpoint_queixas.append(queixa_extra)
                     string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas registradas"
 
-                    # Agrupa o endereço com o complemento de forma limpa para a planilha
                     endereco_completo = f"{endereco_base} - {complemento_c}" if complemento_c else endereco_base
 
-                    # Monta o dicionário estruturado para anexar à planilha
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
                         "Plano": plano_c, "Valor": valor_c, "Vencimento": int(venc_c), 
@@ -368,11 +364,9 @@ elif menu == "📝 Cadastro":
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
                     
-                    # Converte em DataFrame e concatena na base existente
                     df_novo = pd.DataFrame([nova_linha])
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
                     
-                    # Faz o upload automático para a aba correspondente
                     conn.update(worksheet="Alunos", data=df_alunos_atualizado)
                     
                     st.success(f"🎉 {nome_c} foi cadastrado e salvo direto na planilha com sucesso!")
@@ -472,19 +466,4 @@ elif menu == "🖨️ Imprimir Prontuário":
             st.markdown(f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
-                    <h1 style="color: #2E5A44; margin: 0; font-size: 28px;">STUDIO HIGHLINE</h1>
-                    <p style="margin: 5px 0; font-size: 14px; letter-spacing: 2px; color: #555;">PRONTUÁRIO DE ACOMPANHAMENTO INDIVIDUAL</p>
-                    <hr style="border: 0; border-top: 2px solid #2E5A44; margin-top: 15px;">
-                </div>
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 20px;">1. DADOS PESSOAIS</h3>
-                <p><strong>Nome:</strong> {aluno_sel} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Gênero:</strong> {ficha.get('Genero', 'N/D')}</p>
-                <p><strong>Nascimento:</strong> {ficha.get('Nascimento', 'N/D')} &nbsp;&nbsp;|&nbsp;&nbsp; <strong>CPF:</strong> {ficha.get('CPF', 'N/D')}</p>
-                <p><strong>Endereço Completo:</strong> {ficha.get('Endereco', 'N/D')}</p>
-                
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">2. ANAMNESE e QUEIXAS</h3>
-                <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #2E5A44;">{ficha.get('Queixa', 'Sem registros.')}</div>
-                
-                <h3 style="color: #2E5A44; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-top: 25px;">3. CONDUTA E EVOLUÇÃO</h3>
-                <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #FFD700;">{ficha.get('Conduta', 'Sem diretrizes fixadas.')}</div>
-            </div>
-            """, unsafe_allow_html=True)
+                    <h1 style="color:
