@@ -76,7 +76,6 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # Filtro estrito para remover linhas fantasma da lista de espera
     if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
         df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
         df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
@@ -260,11 +259,9 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                valor_sugerido = dados_atuais.get("Valor Plano", "220,00")
-                if novo_plano == "1x semana": valor_sugerido = "180,00"
-                elif novo_plano == "2x semana": valor_sugerido = "220,00"
-                elif novo_plano == "3x semana": valor_sugerido = "300,00"
-                novo_valor = st.text_input("Confirmar Valor Mensal (R$):", value=valor_sugerido)
+                # CORREÇÃO DA COLUNA DE VALOR (Usa 'Valor' em vez de 'Valor Plano')
+                valor_sugerido_bruto = dados_atuais.get("Valor", 220)
+                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=float(valor_sugerido_bruto))
                 
             with c_ed2:
                 novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
@@ -285,7 +282,7 @@ elif menu == "👥 Alunos":
             
             if btn_salvar_alt and not bloqueio_edicao:
                 df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
-                df_alunos.at[idx_real_planilha, "Valor Plano"] = novo_valor
+                df_alunos.at[idx_real_planilha, "Valor"] = novo_valor  # Salva como numérico puro para evitar erros de Dtype
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
@@ -327,11 +324,11 @@ elif menu == "📝 Cadastro":
     with col_p1:
         plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
     with col_p2:
-        if plano_c == "1x semana": valor_padrao = "180,00"
-        elif plano_c == "2x semana": valor_padrao = "220,00"
-        elif plano_c == "3x semana": valor_padrao = "300,00"
-        else: valor_padrao = "220,00"
-        valor_c = st.text_input("Valor Combinado Mensal (R$):", value=valor_padrao)
+        if plano_c == "1x semana": valor_padrao = 180.0
+        elif plano_c == "2x semana": valor_padrao = 220.0
+        elif plano_c == "3x semana": valor_padrao = 300.0
+        else: valor_padrao = 220.0
+        valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
 
     with st.form("form_novo_aluno_anamnese_avancada"):
         nome_c = st.text_input("Nome Completo:")
@@ -418,10 +415,10 @@ elif menu == "📝 Cadastro":
 
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
-                        "Plano": plano_c, "Valor Plano": valor_c, "Vencimento": int(venc_c), 
+                        "Plano": plano_c, "Valor": float(valor_c), "Vencimento": int(venc_c), 
                         "Dias": dias_c, "Horario": horario_c, "Status": "Ativo", 
                         "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
-                        "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Plano Mensal": valor_c, "Endereco": endereco_completo
+                        "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
 
                     df_novo = pd.DataFrame([nova_linha])
@@ -432,11 +429,10 @@ elif menu == "📝 Cadastro":
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 4. TELA: ESPERA (LAYOUT RESTAURADO ORIGINAL) ---
+# --- 4. TELA: ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
     
-    # Exibe a tabela no topo exatamente como no layout original
     if df_espera is not None and not df_espera.empty:
         colunas_exibir = [c for c in ["Nome", "Telefone"] if c in df_espera.columns]
         st.dataframe(df_espera[colunas_exibir], use_container_width=True)
@@ -445,7 +441,6 @@ elif menu == "⏳ Espera":
         
     st.markdown("---")
     
-    # Formulário de inserção simples logo abaixo
     with st.form("form_novo_prospect_original", clear_on_submit=True):
         nome_esp = st.text_input("Nome do Interessado:")
         tel_esp = st.text_input("Telefone de Contato:")
@@ -469,29 +464,79 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO ---
+# --- 5. TELA: FINANCEIRO (RESTAURAÇÃO DO PAINEL DE INADIMPLÊNCIA ORIGINAL) ---
 elif menu == "💰 Financeiro":
-    st.title("💰 Relatório e Movimentação Financeira")
+    st.title("💰 Painel Financeiro e de Inadimplência")
+    
+    # Processa os dados reais da aba financeira
+    total_recebido = 0.0
+    total_pendente = 0.0
     
     if df_financeiro is not None and not df_financeiro.empty:
-        col_valor_fin = "Valor" if "Valor" in df_financeiro.columns else (df_financeiro.columns[1] if len(df_financeiro.columns) > 1 else None)
-        
-        if col_valor_fin:
-            valores_limpos = df_financeiro[col_valor_fin].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
-            valores_numericos = pd.to_numeric(valores_limpos, errors="coerce")
-            st.metric(label="Faturamento Total Acumulado (R$)", value=f"R$ {valores_numericos.sum():,.2f}")
+        # Tenta calcular dinamicamente com base nas colunas Status e Valor
+        if "Status" in df_financeiro.columns and "Valor" in df_financeiro.columns:
+            df_financeiro["Valor_Num"] = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+            df_financeiro["Valor_Num"] = pd.to_numeric(df_financeiro["Valor_Num"], errors="coerce").fillna(0.0)
             
-        st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
+            total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor_Num"].sum()
+            total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor_Num"].sum()
+            
+            # Caso não usem flag Pago/Pendente estruturado, calcula o total da tabela
+            if total_recebido == 0.0 and total_pendente == 0.0:
+                total_recebido = df_financeiro["Valor_Num"].sum()
+    
+    # 1. Exibição dos Cartões Originais
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        st.metric(label="Total Recebido", value=f"R$ {total_recebido:,.2f}")
+    with f_col2:
+        st.metric(label="Total Pendente", value=f"R$ {total_pendente:,.2f}")
+        
+    st.markdown("---")
+    
+    # 2. Seção para dar Baixa em Pagamentos Pendentes
+    st.markdown("### 🔄 Dar Baixa em Pagamentos Pendentes")
+    if df_financeiro is not None and not df_financeiro.empty and "Status" in df_financeiro.columns:
+        df_pendentes = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]
+        
+        if not df_pendentes.empty:
+            opcoes_pendentes = []
+            for idx, row in df_pendentes.iterrows():
+                aluno_p = row.get("Aluno", row.get("Nome", "Desconhecido"))
+                val_p = row.get("Valor", "0.00")
+                cat_p = row.get("Categoria", "Mensalidade")
+                opcoes_pendentes.append(f"{aluno_p} - R$ {val_p} ({cat_p}) | ID: {idx}")
+                
+            selecionado_baixa = st.selectbox("Selecione qual registro pendente deseja dar baixa:", opcoes_pendentes)
+            
+            if st.button("Confirmar Recebimento"):
+                idx_baixa = int(selecionado_baixa.split("| ID: ")[1])
+                df_financeiro.at[idx_baixa, "Status"] = "Pago"
+                # Remove a coluna auxiliar antes de salvar de volta
+                if "Valor_Num" in df_financeiro.columns:
+                    df_financeiro.drop(columns=["Valor_Num"], inplace=True)
+                    
+                conn.update(worksheet="financeiro", data=df_financeiro)
+                st.success("✅ Pagamento confirmado e registrado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+        else:
+            st.info("Nenhum pagamento pendente encontrado no momento.")
+            
+    st.markdown("---")
+    st.markdown("### 📋 Histórico Geral de Transações")
+    if df_financeiro is not None and not df_financeiro.empty:
+        colunas_exibir_fin = [c for c in df_financeiro.columns if c != "Valor_Num"]
+        st.dataframe(df_financeiro[colunas_exibir_fin], use_container_width=True, hide_index=True)
     else:
-        st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos ou vazia.")
+        st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
-# --- 6. TELA: PERFIL (IMPLEMENTAÇÃO 4 VISÕES RECONSTRUÍDAS) ---
+# --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
 
     if not df_ativos.empty:
-        # --- PRIMEIRA LINHA DE GRÁFICOS: PLANOS E GÊNERO ---
         g_col1, g_col2 = st.columns(2)
         
         with g_col1:
@@ -531,7 +576,6 @@ elif menu == "👤 Perfil":
 
         st.markdown("---")
 
-        # --- SEGUNDA LINHA DE GRÁFICOS: FAIXA ETÁRIA E FATURAMENTO DIÁRIO ---
         g_col3, g_col4 = st.columns(2)
 
         with g_col3:
@@ -569,13 +613,13 @@ elif menu == "👤 Perfil":
 
         with g_col4:
             st.markdown("### Faturamento Projetado por Dia do Mês")
-            if "Vencimento" in df_ativos.columns and "Valor Plano" in df_ativos.columns:
+            if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
                 
                 for idx, row in df_ativos.iterrows():
                     try:
                         dia_venc = int(row["Vencimento"])
-                        val_limpo = str(row["Valor Plano"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
+                        val_limpo = str(row["Valor"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
                         val_num = float(val_limpo)
                         
                         if 1 <= dia_venc <= 31:
@@ -600,9 +644,9 @@ elif menu == "👤 Perfil":
                 )
                 st.plotly_chart(fig_fat, use_container_width=True)
             else:
-                st.info("Colunas de 'Vencimento' ou 'Valor Plano' ausentes para projetar faturamento.")
+                st.info("Colunas de 'Vencimento' ou 'Valor' ausentes para projetar faturamento.")
     else:
-        st.info("Dados de alunos ativos insuficientes para gerar os indicadores de perfil.")
+        st.info("Dados de alunos ativos insuficientes para gerar os indicators de perfil.")
 
 # --- 7. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
@@ -657,7 +701,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold;">Plano Atual:</td>
-                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor Plano', '0,00')}</td>
+                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor', '0,00')}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold;">Dias/Horários fixos:</td>
