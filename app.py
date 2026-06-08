@@ -50,10 +50,7 @@ st.markdown("""
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
 try:
-    # Inicializa a conexão de leitura/escrita buscando os parâmetros direto do Secrets
     conn = st.connection("gsheets", type=GSheetsConnection)
-    
-    # Carrega os dados em tempo real puxando apenas pelo nome da worksheet em minúsculas
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
     df_espera = conn.read(worksheet="espera", keep_default_na=False)
@@ -103,11 +100,11 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO E MENU ORDENADO
+# 3. BARRA LATERAL - LOGO CORRIGIDA E MENU
 # ==========================================
 with st.sidebar:
     USUARIO_GITHUB = "pboszczovski"
-    REPOSITORIO_GITHUB = "hihgline-app"
+    REPOSITORIO_GITHUB = "highline-app"  # CORRIGIDO AQUI
     
     url_logo_internet = f"https://raw.githubusercontent.com/{USUARIO_GITHUB}/{REPOSITORIO_GITHUB}/main/Highline%20Logo.png"
     arquivo_logo_local = "Highline Logo.png"
@@ -222,13 +219,11 @@ elif menu == "👥 Alunos":
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
-                # Removido a opção "Outro" também da tela de edição
                 lista_planos = ["1x semana", "2x semana", "3x semana"]
                 plano_atual = dados_atuais.get("Plano", "1x semana")
                 idx_plano = lista_planos.index(plano_atual) if plano_atual in lista_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", lista_planos, index=idx_plano)
                 
-                # Correspondência automática de valor na Edição Rápida
                 valor_sugerido = dados_atuais.get("Valor", "220,00")
                 if novo_plano == "1x semana": valor_sugerido = "180,00"
                 elif novo_plano == "2x semana": valor_sugerido = "220,00"
@@ -261,7 +256,6 @@ elif menu == "👥 Alunos":
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
-                st.apply_action = True # Flag segura para evitar re-run em loop
                 st.rerun()
                 
             if btn_inativar_alt:
@@ -295,7 +289,6 @@ elif menu == "📝 Cadastro":
     st.subheader("1. Dados Pessoais e de Contrato")
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        # CORREÇÃO: "Outro" removido da lista de planos oficiais
         plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
     with col_p2:
         if plano_c == "1x semana": valor_padrao = "180,00"
@@ -465,6 +458,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                 st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
+            # AS ASPAS TRIPLAS ABAIXO FORAM CORRIGIDAS FECHANDO O BLOCO DE TEXTO
             st.markdown(f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
