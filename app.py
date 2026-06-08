@@ -4,10 +4,6 @@ import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import os
-import folium
-from streamlit_folium import st_folium
-from geopy.geocoders import Nominatim
-import time
 
 # ==========================================
 # 1. CONFIGURAÇÃO DE IDENTIDADE VISUAL (CSS)
@@ -73,26 +69,6 @@ def formatar_brl(valor):
         return f"R$ {val_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
         return str(valor)
-
-# --- FUNÇÃO DE GEOCODIFICAÇÃO PARA O MAPA (CORRIGIDA) ---
-geolocator = Nominatim(user_agent="highline_pilates_app_nh_2026")
-
-@st.cache_data(ttl=86400)
-def buscar_coordenadas(endereco, bairro):
-    try:
-        endereco_completo = f"{str(endereco)}, Bairro {str(bairro)}, Novo Hamburgo, RS, Brasil"
-        localizacao = geolocator.geocode(endereco_completo, timeout=10)
-        if localizacao:
-            return localizacao.latitude, localizacao.longitude
-    except:
-        pass
-    try:
-        localizacao_bairro = geolocator.geocode(f"Bairro {str(bairro)}, Novo Hamburgo, RS, Brasil", timeout=10)
-        if localizacao_bairro:
-            return localizacao_bairro.latitude, localizacao_bairro.longitude
-    except:
-        pass
-    return None, None
 
 # ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
@@ -162,7 +138,7 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     return conflitos, alunos_no_horario
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO E MENU
+# 3. BARRA LATERAL - LOGO E MENU (Sem Mapa)
 # ==========================================
 with st.sidebar:
     USUARIO_GITHUB = "pboszczovski"
@@ -192,7 +168,6 @@ with st.sidebar:
             "⏳ Espera",
             "💰 Financeiro",
             "👤 Perfil",
-            "🗺️ Mapa",
             "⚙️ Preços",
             "📁 Arquivo Morto",
             "🖨️ Imprimir Prontuário"
@@ -328,7 +303,6 @@ elif menu == "👥 Alunos":
             if btn_salvar_alt and not bloqueio_edicao:
                 idx_inteiro = int(idx_real_planilha)
                 
-                # CORREÇÃO DE DTYPE: Força a tipagem de coluna flexível no Pandas antes da atribuição
                 df_alunos["Valor"] = df_alunos["Valor"].astype(object)
                 
                 df_alunos.at[idx_inteiro, "Plano"] = novo_plano
@@ -538,7 +512,7 @@ elif menu == "⏳ Espera":
             else:
                 st.error("Por favor, preencha o Nome e o Telefone.")
 
-# --- 5. TELA: FINANCEIRO ---
+# --- 5. TELA: FINANCEIRO (Interface Clássica Restaurada) ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro e de Inadimplência")
     
@@ -556,13 +530,30 @@ elif menu == "💰 Financeiro":
             if total_recebido == 0.0 and total_pendente == 0.0:
                 total_recebido = df_financeiro["Valor_Num"].sum()
     
+    # Blocos visuais customizados superiores
     f_col1, f_col2 = st.columns(2)
     with f_col1:
-        st.metric(label="Total Recebido", value=formatar_brl(total_recebido))
+        st.markdown(
+            f"""
+            <div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #2e7d32; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);">
+                <p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Recebido</p>
+                <h2 style="margin: 5px 0 0 0; color: #2e7d32; font-size: 32px;">{formatar_brl(total_recebido)}</h2>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
     with f_col2:
-        st.metric(label="Total Pendente", value=formatar_brl(total_pendente))
+        st.markdown(
+            f"""
+            <div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828; box-shadow: 0px 2px 4px rgba(0,0,0,0.05);">
+                <p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p>
+                <h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
         
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
     
     st.markdown("### 🔄 Dar Baixa em Pagamentos Pendentes")
     if df_financeiro is not None and not df_financeiro.empty and "Status" in df_financeiro.columns:
@@ -576,9 +567,9 @@ elif menu == "💰 Financeiro":
                 cat_p = row.get("Categoria", "Mensalidade")
                 opcoes_pendentes.append(f"{aluno_p} - {formatar_brl(val_p)} ({cat_p}) | ID: {idx}")
                 
-            selecionado_baixa = st.selectbox("Selecione qual registro pendente deseja dar baixa:", opcoes_pendentes)
+            selecionado_baixa = st.selectbox("Alunos inadimplentes:", options=opcoes_pendentes, label_visibility="collapsed")
             
-            if st.button("Confirmar Recebimento"):
+            if st.button("Confirmar Recebimento", type="primary"):
                 idx_baixa = int(selecionado_baixa.split("| ID: ")[1])
                 df_financeiro.at[idx_baixa, "Status"] = "Pago"
                 if "Valor_Num" in df_financeiro.columns:
@@ -591,7 +582,7 @@ elif menu == "💰 Financeiro":
         else:
             st.info("Nenhum pagamento pendente encontrado no momento.")
             
-    st.markdown("---")
+    st.markdown("<br><hr>", unsafe_allow_html=True)
     st.markdown("### 📋 Histórico Geral de Transações")
     if df_financeiro is not None and not df_financeiro.empty:
         colunas_exibir_fin = [c for c in df_financeiro.columns if c != "Valor_Num"]
@@ -604,7 +595,7 @@ elif menu == "💰 Financeiro":
     else:
         st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
 
-# --- 6. TELA: PERFIL ---
+# --- 6. TELA: PERFIL (Com Indicador Geográfico Integrado) ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
@@ -626,7 +617,7 @@ elif menu == "👤 Perfil":
                     color_discrete_sequence=["#2E5A44"]
                 )
                 fig_planos.update_traces(textposition="auto")
-                fig_planos.update_layout(xaxis_title="Número de Alunos", yaxis_title="Plano")
+                fig_planos.update_layout(xaxis_title="Número de Alunos", yaxis_title="Plano", plot_bgcolor="rgba(0,0,0,0)")
                 st.plotly_chart(fig_planos, use_container_width=True)
             else:
                 st.info("Coluna 'Plano' não encontrada na planilha.")
@@ -674,9 +665,10 @@ elif menu == "👤 Perfil":
                         x="Faixa Etária", 
                         y="Alunos", 
                         text="Alunos", 
-                        color_discrete_sequence=["#4f7c62"]
+                        color_discrete_sequence=["#2E5A44"]
                     )
                     fig_idades.update_traces(textposition="outside")
+                    fig_idades.update_layout(plot_bgcolor="rgba(0,0,0,0)", yaxis=dict(tickformat="d"))
                     st.plotly_chart(fig_idades, use_container_width=True)
                 else:
                     st.info("Nenhuma data de nascimento válida para calcular as idades.")
@@ -692,133 +684,116 @@ elif menu == "👤 Perfil":
                     try:
                         venc = int(row["Vencimento"])
                         val_bruto = row["Valor"]
-                        if isinstance(val_bruto, (int, float)):
-                            val_f = float(val_bruto)
-                        else:
+                        try:
                             val_f = float(str(val_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                        except:
+                            val_f = float(val_bruto)
                         if 1 <= venc <= 31:
                             faturamento_por_dia[venc] += val_f
                     except:
                         continue
                         
-                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
-                fig_faturamento = px.line(
-                    df_faturamento, 
+                df_fat = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado (R$)"])
+                
+                fig_fat = px.line(
+                    df_fat, 
                     x="Dia do Vencimento", 
-                    y="Faturamento Projetado", 
+                    y="Faturamento Projetado (R$)",
                     markers=True,
-                    color_discrete_sequence=["#2E5A44"]
+                    color_discrete_sequence=["#FFD700"]
                 )
-                st.plotly_chart(fig_faturamento, use_container_width=True)
+                fig_fat.update_layout(xaxis=dict(tickmode="linear", tick0=1, dtick=2), plot_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_fat, use_container_width=True)
             else:
-                st.info("Colunas de 'Vencimento' ou 'Valor' ausentes para cálculo de projeção.")
-    else:
-        st.info("Sem dados de alunos ativos para estruturar o perfil estatístico.")
+                st.info("Colunas 'Vencimento' ou 'Valor' ausentes na planilha.")
 
-# --- 7. TELA: MAPA (DISTRIBUIÇÃO GEOGRÁFICA) ---
-elif menu == "🗺️ Mapa":
-    st.title("🗺️ Distribuição Geográfica de Alunos")
-    st.caption("Localização espacial automatizada via endereços registrados em Novo Hamburgo.")
-    
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
-    
-    if not df_ativos.empty and "Endereco" in df_ativos.columns and "Bairro" in df_ativos.columns:
-        alunos_com_endereco = df_ativos[df_ativos["Endereco"].notna() & (df_ativos["Endereco"].astype(str).str.strip() != "")]
-        
-        # Centralizado por padrão em Novo Hamburgo, RS
-        mapa = folium.Map(location=[-29.6846, -53.8069], zoom_start=12)
-        quantidade_localizados = 0
-        
-        for idx, linha in alunos_com_endereco.iterrows():
-            end = linha["Endereco"]
-            bair = linha["Bairro"]
-            nome = linha["Nome"]
-            
-            # PROTEÇÃO SEGURA: O unpack agora consome o retorno de fallback de forma blindada
-            lat, lon = buscar_coordenadas(end, bair)
-            
-            if lat is not None and lon is not None:
-                folium.Marker(
-                    [lat, lon],
-                    popup=f"<b>Aluno:</b> {nome}<br><b>Bairro:</b> {bair}<br><b>Endereço:</b> {end}",
-                    tooltip=nome,
-                    icon=folium.Icon(color="green", icon="home")
-                ).add_to(mapa)
-                quantidade_localizados += 1
-            time.sleep(0.1) # Evita spam do Nominatim API
-            
-        if quantidade_localizados > 0:
-            st_folium(mapa, width=900, height=500)
-            st.success(f"🗺️ {quantidade_localizados} marcadores plotados com sucesso no mapa.")
-        else:
-            st.warning("Não foi possível geolocalizar nenhum endereço. Certifique-se de que os nomes de ruas e bairros estão corretos.")
-            
+        # NOVO: Seção geográfica integrada dinamicamente por bairro
         st.markdown("---")
-        st.subheader("📊 Densidade de Alunos Ativos por Bairro")
-        contagem_bairros = df_ativos["Bairro"].value_counts().reset_index()
-        contagem_bairros.columns = ["Bairro", "Quantidade"]
-        fig_bairros = px.bar(contagem_bairros, x="Bairro", y="Quantidade", color_discrete_sequence=["#2E5A44"])
-        st.plotly_chart(fig_bairros, use_container_width=True)
-    else:
-        st.info("Colunas de 'Endereco' ou 'Bairro' ausentes na folha de cálculo.")
+        st.markdown("### 🗺️ Distribuição Geográfica dos Alunos (Por Bairro)")
+        if "Bairro" in df_ativos.columns:
+            df_bairro = df_ativos["Bairro"].astype(str).str.strip().value_counts().reset_index()
+            df_bairro.columns = ["Bairro", "Quantidade"]
+            df_bairro = df_bairro[df_bairro["Bairro"].str.lower() != "nan"]
+            
+            fig_bairro = px.bar(
+                df_bairro, 
+                x="Bairro", 
+                y="Quantidade",
+                text="Quantidade",
+                labels={'Quantidade': 'Alunos Ativos'},
+                color_discrete_sequence=["#2E5A44"]
+            )
+            fig_bairro.update_traces(textposition="outside")
+            fig_bairro.update_layout(
+                xaxis_title="Bairros de Novo Hamburgo",
+                yaxis_title="Número de Alunos",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(tickformat="d")
+            )
+            st.plotly_chart(fig_bairro, use_container_width=True)
+        else:
+            st.info("Coluna 'Bairro' não encontrada para mapeamento regional.")
 
-# --- 8. TELA: PREÇOS ---
+# --- 7. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela Vigente de Preços e Planos")
-    st.write("Abaixo estão listadas as definições operacionais de precificação padrão do estúdio:")
+    st.title("⚙️ Tabela de Preços e Configuração Ouro")
+    st.write("Valores de referência vigentes para contratos estruturais:")
     
-    tabela_precos = pd.DataFrame({
-        "Modalidade / Frequência": ["1x na Semana", "2x na Semana", "3x na Semana"],
-        "Valor Mensal de Referência": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
-        "Capacidade Máxima por Horário": ["3 Alunos", "3 Alunos", "3 Alunos"]
-    })
-    st.table(tabela_precos)
+    precos_dados = {
+        "Frequência Semanal": ["1x na Semana", "2x na Semana", "3x na Semana"],
+        "Mensalidade Sugerida": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
+        "Sessões Estimadas (Mês)": [4, 8, 12]
+    }
+    st.table(pd.DataFrame(precos_dados))
 
-# --- 9. TELA: ARQUIVO MORTO ---
+# --- 8. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
-    st.title("📁 Arquivo Morto (Alunos Inativos)")
+    st.title("📁 Alunos Inativos (Arquivo Morto)")
     df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"] if "Status" in df_alunos.columns else pd.DataFrame()
     
     if not df_inativos.empty:
-        st.write(f"Total de registros arquivados: {len(df_inativos)}")
         st.dataframe(df_inativos, use_container_width=True, hide_index=True)
     else:
-        st.info("Nenhum histórico de aluno inativo encontrado.")
+        st.info("Nenhum registro inativado na folha de dados.")
 
-# --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
+# --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Emissão e Impressão de Prontuários")
+    st.title("🖨️ Emissão e Impressão de Prontuário de Anamnese")
     
     if not df_alunos.empty:
-        aluno_prontuario = st.selectbox("Selecione o Aluno para gerar a folha de impressão:", ["-- Escolha o Aluno --"] + df_alunos["Nome"].tolist())
+        aluno_sel = st.selectbox("Selecione o Aluno para visualização oficial:", ["-- Selecione --"] + df_alunos["Nome"].tolist())
         
-        if aluno_prontuario != "-- Escolha o Aluno --":
-            dados_p = df_alunos[df_alunos["Nome"] == aluno_prontuario].iloc[0]
+        if aluno_sel != "-- Selecione --":
+            r = df_alunos[df_alunos["Nome"] == aluno_sel].iloc[0]
             
-            st.markdown("<div class='no-print'>💡 Use o atalho <b>Ctrl + P</b> ou <b>Cmd + P</b> no seu navegador para imprimir ou salvar em PDF. A barra lateral e os botões serão ocultados automaticamente na impressão.</div>", unsafe_allow_html=True)
-            st.markdown("---")
+            st.markdown("<div class='no-print'>💡 Dica: Use Ctrl+P para salvar em PDF ou imprimir sem menus laterais.</div>", unsafe_allow_html=True)
             
             st.markdown(f"""
-            <div class='print-container' style='font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ccc;'>
-                <h2 style='text-align: center; color: #2E5A44;'>HIGHLINE STUDIO DE PILATES</h2>
-                <h3 style='text-align: center; margin-top: -10px;'>FICHA DE EVOLUÇÃO E ANAMNESE</h3>
-                <br>
-                <table style='width: 100%; border-collapse: collapse;'>
-                    <tr><td><b>Nome:</b> {dados_p.get('Nome', '')}</td><td><b>CPF:</b> {dados_p.get('CPF', 'Não informado')}</td></tr>
-                    <tr><td><b>Telefone:</b> {dados_p.get('Telefone', '')}</td><td><b>Nascimento:</b> {dados_p.get('Nascimento', '')}</td></tr>
-                    <tr><td><b>Plano:</b> {dados_p.get('Plano', '')}</td><td><b>Horário:</b> {dados_p.get('Horario', '')} ({dados_p.get('Dias', '')})</td></tr>
-                    <tr><td colspan='2'><b>Endereço:</b> {dados_p.get('Endereco', '')} - Bairro: {dados_p.get('Bairro', '')}</td></tr>
+            <div class="print-container" style="border: 1px solid #ccc; padding: 30px; border-radius: 5px; background-color: #fff; color: #000;">
+                <h2 style="text-align: center; color: #2E5A44; margin-bottom: 5px;">HIGHLINE STUDIO DE PILATES</h2>
+                <h4 style="text-align: center; margin-top: 0; font-weight: normal; color: #555;">Ficha de Avaliação e Anamnese Estruturada</h4>
+                <hr style="border-color: #2E5A44;">
+                
+                <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr><td><strong>Nome:</strong> {r.get('Nome','')}</td><td><strong>CPF:</strong> {r.get('CPF','')}</td></tr>
+                    <tr><td><strong>WhatsApp:</strong> {r.get('Telefone','')}</td><td><strong>Nascimento:</strong> {r.get('Nascimento','')}</td></tr>
+                    <tr><td><strong>Gênero:</strong> {r.get('Genero','')}</td><td><strong>Início das Aulas:</strong> {r.get('Inicio_Aulas','')}</td></tr>
+                    <tr><td colspan="2"><strong>Endereço:</strong> {r.get('Endereco', r.get('Bairro',''))}</td></tr>
                 </table>
-                <br>
-                <h4 style='border-bottom: 2px solid #2E5A44; color: #2E5A44; padding-bottom: 3px;'>QUEIXAS E DIAGNÓSTICO</h4>
-                <p>{dados_p.get('Queixa', 'Sem queixas registradas.')}</p>
-                <br>
-                <h4 style='border-bottom: 2px solid #2E5A44; color: #2E5A44; padding-bottom: 3px;'>DIRETRIZES DE CONDUTA CLÍNICA</h4>
-                <p>{dados_p.get('Conduta', 'Sem restrições mapeadas.')}</p>
+                
+                <h3 style="color:#2E5A44; border-bottom: 1px solid #eee; padding-bottom:5px;">📋 Quadro de Queixas Principais</h3>
+                <p style="background: #fdfdfd; padding: 10px; border-left: 3px solid #2E5A44;">{r.get('Queixa','Sem queixas registradas.')}</p>
+                
+                <h3 style="color:#2E5A44; border-bottom: 1px solid #eee; padding-bottom:5px;">🧘 Diretrizes de Conduta e Restrições</h3>
+                <p style="background: #fdfdfd; padding: 10px; border-left: 3px solid #FFD700;">{r.get('Conduta','Sem restrições declaradas.')}</p>
+                
                 <br><br><br>
-                <div style='text-align: center; margin-top: 50px;'>
-                    <p>____________________________________________________</p>
-                    <p>Assinatura do Profissional Responsável</p>
-                </div>
+                <table style="width:100%; margin-top: 50px;">
+                    <tr>
+                        <td style="text-align: center; width: 45%; border-top: 1px solid #000;"><br>Assinatura do Profissional</td>
+                        <td style="width: 10%;"></td>
+                        <td style="text-align: center; width: 45%; border-top: 1px solid #000;"><br>Assinatura do Aluno</td>
+                    </tr>
+                </table>
             </div>
             """, unsafe_allow_html=True)
