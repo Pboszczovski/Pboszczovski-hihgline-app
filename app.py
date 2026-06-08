@@ -432,7 +432,7 @@ elif menu == "📝 Cadastro":
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 4. TELA: ESPERA (LAYOUT RESTAURADO) ---
+# --- 4. TELA: ESPERA (LAYOUT RESTAURADO ORIGINAL) ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
     
@@ -454,7 +454,6 @@ elif menu == "⏳ Espera":
         
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
-                # Mantém a estrutura compatível com as outras colunas se existirem
                 nova_linha_espera = {"Nome": nome_esp, "Telefone": tel_esp}
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
                 
@@ -486,22 +485,57 @@ elif menu == "💰 Financeiro":
     else:
         st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos ou vazia.")
 
-# --- 6. TELA: PERFIL ---
+# --- 6. TELA: PERFIL (IMPLEMENTAÇÃO 4 VISÕES RECONSTRUÍDAS) ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
 
     if not df_ativos.empty:
+        # --- PRIMEIRA LINHA DE GRÁFICOS: PLANOS E GÊNERO ---
         g_col1, g_col2 = st.columns(2)
+        
         with g_col1:
+            st.markdown("### Alunos por Tipo de Plano")
+            if "Plano" in df_ativos.columns:
+                df_planos = df_ativos["Plano"].value_counts().reset_index()
+                df_planos.columns = ["Plano", "Quantidade"]
+                fig_planos = px.bar(
+                    df_planos, 
+                    y="Plano", 
+                    x="Quantidade", 
+                    orientation="h",
+                    text="Quantidade",
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                fig_planos.update_traces(textposition="auto")
+                fig_planos.update_layout(xaxis_title="Número de Alunos", yaxis_title="Plano")
+                st.plotly_chart(fig_planos, use_container_width=True)
+            else:
+                st.info("Coluna 'Plano' não encontrada na planilha.")
+
+        with g_col2:
             st.markdown("### Distribuição por Gênero")
             if "Genero" in df_ativos.columns:
                 df_gen = df_ativos["Genero"].value_counts().reset_index()
                 df_gen.columns = ["Gênero", "Quantidade"]
-                fig_pizza = px.pie(df_gen, names="Gênero", values="Quantidade", hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_pizza = px.pie(
+                    df_gen, 
+                    names="Gênero", 
+                    values="Quantidade", 
+                    hole=0.3, 
+                    color_discrete_sequence=["#2E5A44", "#FFD700"]
+                )
                 st.plotly_chart(fig_pizza, use_container_width=True)
-        with g_col2:
-            st.markdown("### Faixa Etária dos Alunos")
+            else:
+                st.info("Coluna 'Genero' não encontrada na planilha.")
+
+        st.markdown("---")
+
+        # --- SEGUNDA LINHA DE GRÁFICOS: FAIXA ETÁRIA E FATURAMENTO DIÁRIO ---
+        g_col3, g_col4 = st.columns(2)
+
+        with g_col3:
+            st.markdown("### Perfil de Alunos por Faixa Etária")
             if "Nascimento" in df_ativos.columns:
                 idades = []
                 ano_atual = datetime.now().year
@@ -509,18 +543,66 @@ elif menu == "👤 Perfil":
                     try:
                         ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
                         idades.append(ano_atual - ano_nasc)
-                    except: continue
+                    except:
+                        continue
                 if idades:
                     df_idades = pd.DataFrame({"Idade": idades})
-                    bins = [0, 25, 35, 45, 55, 120]
-                    labels = ["Até 25 anos", "26 a 35 anos", "36 a 45 anos", "46 a 55 anos", "Mais de 55 anos"]
+                    bins = [0, 25, 35, 45, 55, 65, 120]
+                    labels = ["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]
                     df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
                     df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
                     df_faixas.columns = ["Faixa Etária", "Alunos"]
-                    fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos", color_discrete_sequence=["#2E5A44"])
+                    
+                    fig_idades = px.bar(
+                        df_faixas, 
+                        x="Faixa Etária", 
+                        y="Alunos", 
+                        text="Alunos", 
+                        color_discrete_sequence=["#4f7c62"]
+                    )
+                    fig_idades.update_traces(textposition="outside")
                     st.plotly_chart(fig_idades, use_container_width=True)
+                else:
+                    st.info("Nenhuma data de nascimento válida para calcular as idades.")
+            else:
+                st.info("Coluna 'Nascimento' não encontrada na planilha.")
+
+        with g_col4:
+            st.markdown("### Faturamento Projetado por Dia do Mês")
+            if "Vencimento" in df_ativos.columns and "Valor Plano" in df_ativos.columns:
+                faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
+                
+                for idx, row in df_ativos.iterrows():
+                    try:
+                        dia_venc = int(row["Vencimento"])
+                        val_limpo = str(row["Valor Plano"]).replace("R$", "").replace(".", "").replace(",", ".").strip()
+                        val_num = float(val_limpo)
+                        
+                        if 1 <= dia_venc <= 31:
+                            faturamento_por_dia[dia_venc] += val_num
+                    except:
+                        continue
+                
+                df_fat = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia", "Faturamento"])
+                df_fat["Dia"] = df_fat["Dia"].astype(str)
+                
+                fig_fat = px.bar(
+                    df_fat, 
+                    x="Dia", 
+                    y="Faturamento",
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                
+                fig_fat.update_layout(
+                    xaxis_title="Dia do Vencimento",
+                    yaxis_title="Faturamento Projetado (R$)",
+                    xaxis={'categoryorder':'array', 'categoryarray':[str(d) for d in range(1, 32)]}
+                )
+                st.plotly_chart(fig_fat, use_container_width=True)
+            else:
+                st.info("Colunas de 'Vencimento' ou 'Valor Plano' ausentes para projetar faturamento.")
     else:
-        st.info("Dados gráficos insuficientes.")
+        st.info("Dados de alunos ativos insuficientes para gerar os indicadores de perfil.")
 
 # --- 7. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
