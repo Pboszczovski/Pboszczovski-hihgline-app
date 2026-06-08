@@ -49,8 +49,9 @@ st.markdown("""
 # ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
+conexao_ok = False
 try:
-    # TRATAMENTO SEGURO DA PRIVATE KEY: Converte \n em quebras de linha reais se necessário
+    # Tratamento seguro da Private Key contra quebras de linha corrompidas
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
         if "private_key" in st.secrets["connections"]["gsheets"]:
             p_key = st.secrets["connections"]["gsheets"]["private_key"]
@@ -61,9 +62,17 @@ try:
     df_alunos = conn.read(worksheet="alunos")
     df_financeiro = conn.read(worksheet="financeiro")
     df_espera = conn.read(worksheet="espera", keep_default_na=False)
+    
+    # Padronização de Colunas (Trata acentos como 'Horário' ou 'Horario')
+    for df in [df_alunos, df_financeiro, df_espera]:
+        if df is not None and not df.empty:
+            df.columns = df.columns.str.strip()
+            # Se encontrar 'Horário', espelha para 'Horario' para manter compatibilidade interna
+            if "Horário" in df.columns and "Horario" not in df.columns:
+                df["Horario"] = df["Horário"]
+                
     conexao_ok = True
 except Exception as e:
-    conexao_ok = False
     erro_msg = str(e)
 
 # ==========================================
@@ -153,7 +162,7 @@ with st.sidebar:
         st.error("● Banco de Dados Offline")
 
 if not conexao_ok:
-    st.error(f"Erro crítico de conexão com o Google Sheets. Certifique-se de configurar os 'Secrets' no painel do Streamlit. Detalhes: {erro_msg}")
+    st.error(f"Erro crítico de conexão com o Google Sheets. Verifique as configurações das credenciais. Detalhes: {erro_msg}")
     st.stop()
 
 # ==========================================
@@ -259,9 +268,11 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Valor"] = novo_valor
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
+                if "Horário" in df_alunos.columns:
+                    df_alunos.at[idx_real_planilha, "Horário"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated!")
+                st.success("🎉 Planilha atualizada!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -366,9 +377,17 @@ elif menu == "📝 Cadastro":
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
                     
+                    # Garante gravação correta tanto se a coluna na planilha possuir acento ou não
+                    if "Horário" in df_alunos.columns:
+                        nova_linha["Horário"] = horario_c
+
                     df_novo = pd.DataFrame([nova_linha])
                     df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
                     
+                    # Remove coluna fantasma de controle se houver antes de salvar
+                    if "Horario" in df_alunos_atualizado.columns and "Horário" in df_alunos.columns:
+                        df_alunos_atualizado = df_alunos_atualizado.drop(columns=["Horario"])
+
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     
                     st.success(f"🎉 {nome_c} cadastrado!")
@@ -487,7 +506,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold;">Dias/Horários fixos:</td>
-                        <td style="padding: 8px;">{ficha.get('Dias', 'Não Informado')} às {ficha.get('Horario', 'Não Informado')}</td>
+                        <td style="padding: 8px;">{ficha.get('Horario', 'Não Informado')}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold; vertical-align: top;">Histórico de Queixas / Anamnese:</td>
