@@ -191,7 +191,7 @@ if menu == "📅 Agenda":
     else:
         st.info("🎂 Nenhum aluno a fazer aniversário hoje.")
         
-    # Mapeamento do dia da semana atual para corresponder à entrada de texto da planilha
+    # Mapeamento dinâmico do dia da semana atual para busca de strings na planilha
     dia_semana_num = hoje_datetime.weekday()
     
     dias_validos_busca = []
@@ -237,7 +237,7 @@ if menu == "📅 Agenda":
         if not df_agenda.empty and "Horario" in df_agenda.columns:
             df_agenda = df_agenda.sort_values(by="Horario")
             
-        # Exibição dos resultados filtrados do dia
+        # Exibição da tabela final filtrada
         if not df_agenda.empty:
             colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
             st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
@@ -312,7 +312,7 @@ elif menu == "👥 Alunos":
                     df_alunos.at[idx_real_planilha, "Horário"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated!")
+                st.success("🎉 Planilha atualizada!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -374,6 +374,7 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
+        # Estrutura de Queixas (Anamnese)
         st.subheader("2. Anamnese: Queixas Principais e Sintomas")
         col_q1, col_q2, col_q3 = st.columns(3)
         with col_q1:
@@ -388,7 +389,24 @@ elif menu == "📝 Cadastro":
             q_flexi = st.checkbox("Ganho de Flexibilidade / Mobilidade")
             
         queixa_extra = st.text_input("Outras Queixas Adicionais:")
-        conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
+        
+        # Estrutura de Condutas e Tratamentos Usuais
+        st.subheader("3. Diretrizes de Conduta e Tratamentos Usuais")
+        col_t1, col_t2, col_t3 = st.columns(3)
+        with col_t1:
+            t_fortalecimento = st.checkbox("Fortalecimento de Core / Estabilização")
+            t_alongamento = st.checkbox("Alongamento de Cadeia Posterior")
+            t_mobilidade = st.checkbox("Mobilidade de Quadril e Torácica")
+        with col_t2:
+            t_tracao = st.checkbox("Descompressão / Tração Axial Leve")
+            t_impacto = st.checkbox("Evitar Impacto / Saltos")
+            t_flexao = st.checkbox("Restrição de Flexão de Tronco")
+        with col_t3:
+            t_extensao = st.checkbox("Restrição de Extensão de Tronco")
+            t_carga = st.checkbox("Progressão de Carga Controlada")
+            t_postural = st.checkbox("Reeducação Postural / Alinhamento")
+            
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
         if bloqueio_cadastro:
@@ -396,6 +414,7 @@ elif menu == "📝 Cadastro":
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno Automaticamente"):
                 if nome_c and tel_c:
+                    # Processamento das Queixas Selecionadas
                     checkpoint_queixas = []
                     if q_lombar: checkpoint_queixas.append("Dor Lombar")
                     if q_cervical: checkpoint_queixas.append("Dor Cervical")
@@ -407,13 +426,27 @@ elif menu == "📝 Cadastro":
                     if queixa_extra: checkpoint_queixas.append(queixa_extra)
                     string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas registradas"
 
+                    # Processamento dos Tratamentos Selecionados
+                    checkpoint_condutas = []
+                    if t_fortalecimento: checkpoint_condutas.append("Fortalecimento Core")
+                    if t_alongamento: checkpoint_condutas.append("Alongamento Cad. Posterior")
+                    if t_mobilidade: checkpoint_condutas.append("Mobilidade Quadril/Torácica")
+                    if t_tracao: checkpoint_condutas.append("Descompressão Axial")
+                    if t_impacto: checkpoint_condutas.append("Evitar Impacto")
+                    if t_flexao: checkpoint_condutas.append("Restrição Flexão")
+                    if t_extensao: checkpoint_condutas.append("Restrição Extensão")
+                    if t_carga: checkpoint_condutas.append("Carga Controlada")
+                    if t_postural: checkpoint_condutas.append("Reeducação Postural")
+                    if conduta_extra: checkpoint_condutas.append(conduta_extra)
+                    string_condutas = " | ".join(checkpoint_condutas) if checkpoint_condutas else "Sem restrições especificadas"
+
                     endereco_completo = f"{endereco_base} - {complemento_c}" if complemento_c else endereco_base
 
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
                         "Plano": plano_c, "Valor": valor_c, "Vencimento": int(venc_c), 
                         "Dias": dias_c, "Horario": horario_c, "Status": "Ativo", 
-                        "Queixa": string_queixas, "Conduta": conduta_extra, "Genero": genero_c, 
+                        "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
                     
@@ -428,7 +461,7 @@ elif menu == "📝 Cadastro":
 
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     
-                    st.success(f"🎉 {nome_c} cadastrado!")
+                    st.success(f"🎉 {nome_c} cadastrado com sucesso!")
                     st.cache_data.clear()
                     st.rerun()
 
