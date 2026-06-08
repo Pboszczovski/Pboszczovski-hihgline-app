@@ -52,7 +52,6 @@ st.markdown("""
 def limpar_dataframe(df):
     if df is None or df.empty:
         return df
-    # Remove colunas totalmente sem nome criadas pelo Excel/Sheets
     df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
     df.columns = df.columns.str.strip()
     df.dropna(how="all", inplace=True)
@@ -73,12 +72,11 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Leitura e limpeza das abas usando os novos nomes de colunas
     df_alunos = limpar_dataframe(conn.read(worksheet="alunos"))
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # Filtro estrito para a lista de espera não puxar linhas vazias da planilha
+    # Filtro estrito para remover linhas fantasma da lista de espera
     if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
         df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
         df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
@@ -262,7 +260,6 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                # Mudança aqui: Buscando da coluna corrigida 'Valor Plano'
                 valor_sugerido = dados_atuais.get("Valor Plano", "220,00")
                 if novo_plano == "1x semana": valor_sugerido = "180,00"
                 elif novo_plano == "2x semana": valor_sugerido = "220,00"
@@ -288,7 +285,7 @@ elif menu == "👥 Alunos":
             
             if btn_salvar_alt and not bloqueio_edicao:
                 df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
-                df_alunos.at[idx_real_planilha, "Valor Plano"] = novo_valor  # Salvando na coluna certa
+                df_alunos.at[idx_real_planilha, "Valor Plano"] = novo_valor
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
@@ -419,7 +416,6 @@ elif menu == "📝 Cadastro":
 
                     endereco_completo = f"{endereco_base} - {complemento_c}" if complemento_c else endereco_base
 
-                    # Enviando os dados mapeados para os novos nomes das colunas
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
                         "Plano": plano_c, "Valor Plano": valor_c, "Vencimento": int(venc_c), 
@@ -436,28 +432,30 @@ elif menu == "📝 Cadastro":
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 4. TELA: ESPERA ---
+# --- 4. TELA: ESPERA (LAYOUT RESTAURADO) ---
 elif menu == "⏳ Espera":
-    st.title("⏳ Lista de Espera e Captação de Prospects")
+    st.title("⏳ Gerenciamento da Lista de Espera")
     
-    st.markdown("### 📥 Adicionar Novo Prospect em Espera")
-    with st.form("form_novo_prospect_espera", clear_on_submit=True):
-        col_esp1, col_esp2 = st.columns(2)
-        with col_esp1:
-            nome_esp = st.text_input("Nome do Interessado:")
-            tel_esp = st.text_input("WhatsApp de Contato:")
-        with col_esp2:
-            dias_esp = st.text_input("Preferência de Dias (Ex: Seg/Qua):")
-            horario_esp = st.text_input("Preferência de Horário (Ex: 19:00):")
-            
-        obs_esp = st.text_input("Observações Adicionais:")
-        btn_adicionar_espera = st.form_submit_button("➕ Salvar na Lista de Espera")
+    # Exibe a tabela no topo exatamente como no layout original
+    if df_espera is not None and not df_espera.empty:
+        colunas_exibir = [c for c in ["Nome", "Telefone"] if c in df_espera.columns]
+        st.dataframe(df_espera[colunas_exibir], use_container_width=True)
+    else:
+        st.info("Nenhum prospect aguardando na lista.")
+        
+    st.markdown("---")
+    
+    # Formulário de inserção simples logo abaixo
+    with st.form("form_novo_prospect_original", clear_on_submit=True):
+        nome_esp = st.text_input("Nome do Interessado:")
+        tel_esp = st.text_input("Telefone de Contato:")
+        
+        btn_adicionar_espera = st.form_submit_button("Adicionar à Lista")
         
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
-                nova_linha_espera = {
-                    "Nome": nome_esp, "Telefone": tel_esp, "Dias": dias_esp, "Horario": horario_esp, "Observacoes": obs_esp
-                }
+                # Mantém a estrutura compatível com as outras colunas se existirem
+                nova_linha_espera = {"Nome": nome_esp, "Telefone": tel_esp}
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
                 
                 if df_espera is None or df_espera.empty or "Nome" not in df_espera.columns:
@@ -470,26 +468,13 @@ elif menu == "⏳ Espera":
                 st.cache_data.clear()
                 st.rerun()
             else:
-                st.error("Preencha o Nome e o WhatsApp.")
-                
-    st.markdown("---")
-    st.markdown("### 📋 Prospects Atuais Aguardando Vaga")
-    
-    total_espera = len(df_espera) if df_espera is not None else 0
-    st.metric("Total de Clientes em Espera Real", total_espera)
-    
-    if total_espera > 0:
-        colunas_exibir = [c for c in ["Nome", "Telefone", "Dias", "Horario", "Observacoes"] if c in df_espera.columns]
-        st.dataframe(df_espera[colunas_exibir], use_container_width=True, hide_index=True)
-    else:
-        st.info("A lista de espera está vazia.")
+                st.error("Por favor, preencha o Nome e o Telefone.")
 
 # --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Relatório e Movimentação Financeira")
     
     if df_financeiro is not None and not df_financeiro.empty:
-        # Puxa dinamicamente a coluna de valores da aba financeira
         col_valor_fin = "Valor" if "Valor" in df_financeiro.columns else (df_financeiro.columns[1] if len(df_financeiro.columns) > 1 else None)
         
         if col_valor_fin:
@@ -572,7 +557,6 @@ elif menu == "🖨️ Imprimir Prontuário":
                 st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # Ajustado para exibir o 'Valor Plano' na ficha de impressão
             conteudo_html = f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
