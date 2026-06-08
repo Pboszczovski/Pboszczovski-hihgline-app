@@ -47,9 +47,23 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
+# FUNÇÃO PARA LIMPEZA PADRÃO DE COLUNAS
+# ==========================================
+def limpar_dataframe(df):
+    if df is None or df.empty:
+        return df
+    # Remove colunas totalmente sem nome criadas pelo Excel/Sheets
+    df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
+    df.columns = df.columns.str.strip()
+    df.dropna(how="all", inplace=True)
+    return df
+
+# ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
 conexao_ok = False
+erro_msg = ""
+
 try:
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
         if "private_key" in st.secrets["connections"]["gsheets"]:
@@ -59,42 +73,15 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Leitura crua das abas
-    df_alunos = conn.read(worksheet="alunos")
-    df_financeiro = conn.read(worksheet="financeiro")
-    df_espera = conn.read(worksheet="espera")
+    # Leitura e limpeza das abas usando os novos nomes de colunas
+    df_alunos = limpar_dataframe(conn.read(worksheet="alunos"))
+    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
+    df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # Tratamento da aba ALUNOS para evitar colunas duplicadas ('Valor' repetido na planilha)
-    if df_alunos is not None and not df_alunos.empty:
-        # Se houver colunas duplicadas, o Pandas costuma nomeá-las como 'Valor' e 'Valor.1'
-        # Vamos padronizar limpando os nomes das colunas
-        novas_colunas = []
-        contador_valor = 0
-        for col in df_alunos.columns:
-            col_strip = str(col).strip()
-            if col_strip == "Valor":
-                if contador_valor == 0:
-                    novas_colunas.append("Valor")
-                else:
-                    novas_colunas.append(f"Valor_{contador_valor}")
-                contador_valor += 1
-            else:
-                novas_colunas.append(col_strip)
-        df_alunos.columns = novas_colunas
-        df_alunos.dropna(how="all", inplace=True)
-    
-    # Tratamento da aba FINANCEIRO
-    if df_financeiro is not None and not df_financeiro.empty:
-        df_financeiro.columns = df_financeiro.columns.str.strip()
-        df_financeiro.dropna(how="all", inplace=True)
-        
-    # Tratamento da aba ESPERA (Remove colunas fantasmas e linhas vazias do Sheets)
-    if df_espera is not None and not df_espera.empty:
-        df_espera.columns = df_espera.columns.str.strip()
-        df_espera = df_espera.loc[:, ~df_espera.columns.str.contains('^Unnamed')]
-        df_espera.dropna(how="all", inplace=True)
-        if not df_espera.empty and df_espera.columns[0]:
-            df_espera = df_espera[df_espera[df_espera.columns[0]].astype(str).str.strip() != ""]
+    # Filtro estrito para a lista de espera não puxar linhas vazias da planilha
+    if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
+        df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
+        df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
 
     conexao_ok = True
 except Exception as e:
@@ -187,7 +174,7 @@ with st.sidebar:
         st.error("● Banco de Dados Offline")
 
 if not conexao_ok:
-    st.error(f"Erro crítico de conexão com o Google Sheets. Verifique as configurações das credenciais. Detalhes: {erro_msg}")
+    st.error(f"Erro crítico de configuração ou credenciais. Detalhes: {erro_msg}")
     st.stop()
 
 # ==========================================
@@ -253,7 +240,7 @@ elif menu == "👥 Alunos":
     df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
 
     st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
-    busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome completo...")
+    busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
     df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
     
     st.dataframe(df_ativos_tabela, use_container_width=True, hide_index=True)
@@ -275,7 +262,8 @@ elif menu == "👥 Alunos":
                 idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
                 novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                 
-                valor_sugerido = dados_atuais.get("Valor", "220,00")
+                # Mudança aqui: Buscando da coluna corrigida 'Valor Plano'
+                valor_sugerido = dados_atuais.get("Valor Plano", "220,00")
                 if novo_plano == "1x semana": valor_sugerido = "180,00"
                 elif novo_plano == "2x semana": valor_sugerido = "220,00"
                 elif novo_plano == "3x semana": valor_sugerido = "300,00"
@@ -300,19 +288,19 @@ elif menu == "👥 Alunos":
             
             if btn_salvar_alt and not bloqueio_edicao:
                 df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
-                df_alunos.at[idx_real_planilha, "Valor"] = novo_valor
+                df_alunos.at[idx_real_planilha, "Valor Plano"] = novo_valor  # Salvando na coluna certa
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("❌ Aluno arquivado!")
+                st.success("❌ Aluno arquivado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
     else:
@@ -335,7 +323,7 @@ elif menu == "📝 Cadastro":
             for dia_lotado, qtd in conflitos:
                 st.error(f"🛑 O dia {dia_lotado} às {horario_c} já está lotado ({qtd}/3 alunos).")
         else:
-            st.success(f"✅ Horário disponível.")
+            st.success(f"✅ Horário totalmente disponível.")
 
     st.subheader("1. Dados Pessoais e de Contrato")
     col_p1, col_p2 = st.columns(2)
@@ -356,8 +344,8 @@ elif menu == "📝 Cadastro":
         
         col_end1, col_end2, col_end3 = st.columns([1, 2, 1])
         with col_end1: bairro_c = st.text_input("Bairro:")
-        with col_end2: endereco_base = st.text_input("Endereço (Rua, Número, etc.):")
-        with col_end3: complemento_c = st.text_input("Complemento (Apto, Casa, Bloco):")
+        with col_end2: endereco_base = st.text_input("Endereço (Rua, Número):")
+        with col_end3: complemento_c = st.text_input("Complemento:")
         
         col1, col2 = st.columns(2)
         with col1:
@@ -397,13 +385,13 @@ elif menu == "📝 Cadastro":
             t_carga = st.checkbox("Progressão de Carga Controlada")
             t_postural = st.checkbox("Reeducação Postural / Alinhamento")
             
-        conduta_extra = st.text_input("Diretrizes de Conduta Específicas / Observações:")
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
         if bloqueio_cadastro:
             st.form_submit_button("Cadastro Bloqueado devido à Lotação", disabled=True)
         else:
-            if st.form_submit_button("💾 Salvar Novo Aluno Automaticamente"):
+            if st.form_submit_button("💾 Salvar Novo Aluno"):
                 if nome_c and tel_c:
                     checkpoint_queixas = []
                     if q_lombar: checkpoint_queixas.append("Dor Lombar")
@@ -414,12 +402,12 @@ elif menu == "📝 Cadastro":
                     if q_postura: checkpoint_queixas.append("Melhoria Postural")
                     if q_flexi: checkpoint_queixas.append("Ganho Flexibilidade")
                     if queixa_extra: checkpoint_queixas.append(queixa_extra)
-                    string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas registradas"
+                    string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas"
 
                     checkpoint_condutas = []
                     if t_fortalecimento: checkpoint_condutas.append("Fortalecimento Core")
                     if t_alongamento: checkpoint_condutas.append("Alongamento Cad. Posterior")
-                    if t_mobilidade: checkpoint_condutas.append("Mobilidade Quadril/Torácica")
+                    if t_mobilidade: checkpoint_condutas.append("Mobilidade Quadril")
                     if t_tracao: checkpoint_condutas.append("Descompressão Axial")
                     if t_impacto: checkpoint_condutas.append("Evitar Impacto")
                     if t_flexao: checkpoint_condutas.append("Restrição Flexão")
@@ -427,16 +415,17 @@ elif menu == "📝 Cadastro":
                     if t_carga: checkpoint_condutas.append("Carga Controlada")
                     if t_postural: checkpoint_condutas.append("Reeducação Postural")
                     if conduta_extra: checkpoint_condutas.append(conduta_extra)
-                    string_condutas = " | ".join(checkpoint_condutas) if checkpoint_condutas else "Sem restrições especificadas"
+                    string_condutas = " | ".join(checkpoint_condutas) if checkpoint_condutas else "Sem restrições"
 
                     endereco_completo = f"{endereco_base} - {complemento_c}" if complemento_c else endereco_base
 
+                    # Enviando os dados mapeados para os novos nomes das colunas
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
-                        "Plano": plano_c, "Valor": valor_c, "Vencimento": int(venc_c), 
+                        "Plano": plano_c, "Valor Plano": valor_c, "Vencimento": int(venc_c), 
                         "Dias": dias_c, "Horario": horario_c, "Status": "Ativo", 
                         "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
-                        "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
+                        "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Plano Mensal": valor_c, "Endereco": endereco_completo
                     }
 
                     df_novo = pd.DataFrame([nova_linha])
@@ -467,13 +456,8 @@ elif menu == "⏳ Espera":
         if btn_adicionar_espera:
             if nome_esp and tel_esp:
                 nova_linha_espera = {
-                    "Nome": nome_esp, 
-                    "Telefone": tel_esp, 
-                    "Dias": dias_esp, 
-                    "Horario": horario_esp, 
-                    "Observacoes": obs_esp
+                    "Nome": nome_esp, "Telefone": tel_esp, "Dias": dias_esp, "Horario": horario_esp, "Observacoes": obs_esp
                 }
-                
                 df_novo_esp = pd.DataFrame([nova_linha_espera])
                 
                 if df_espera is None or df_espera.empty or "Nome" not in df_espera.columns:
@@ -482,11 +466,11 @@ elif menu == "⏳ Espera":
                     df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
                 
                 conn.update(worksheet="espera", data=df_espera_atualizado)
-                st.success(f"✅ {nome_esp} adicionado à lista de espera!")
+                st.success(f"✅ {nome_esp} adicionado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
             else:
-                st.error("Por favor, preencha pelo menos o Nome e o WhatsApp de contato.")
+                st.error("Preencha o Nome e o WhatsApp.")
                 
     st.markdown("---")
     st.markdown("### 📋 Prospects Atuais Aguardando Vaga")
@@ -495,18 +479,27 @@ elif menu == "⏳ Espera":
     st.metric("Total de Clientes em Espera Real", total_espera)
     
     if total_espera > 0:
-        st.dataframe(df_espera[["Nome", "Telefone", "Dias", "Horario", "Observacoes"]], use_container_width=True, hide_index=True)
+        colunas_exibir = [c for c in ["Nome", "Telefone", "Dias", "Horario", "Observacoes"] if c in df_espera.columns]
+        st.dataframe(df_espera[colunas_exibir], use_container_width=True, hide_index=True)
     else:
-        st.info("A lista de espera está vazia no momento.")
+        st.info("A lista de espera está vazia.")
 
 # --- 5. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Relatório e Movimentação Financeira")
-    if "Valor" in df_financeiro.columns and not df_financeiro.empty:
-        valores_limpos = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
-        valores_numericos = pd.to_numeric(valores_limpos, errors="coerce")
-        st.metric(label="Faturamento Total Acumulado", value=f"R$ {valores_numericos.sum():,.2f}")
-    st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
+    
+    if df_financeiro is not None and not df_financeiro.empty:
+        # Puxa dinamicamente a coluna de valores da aba financeira
+        col_valor_fin = "Valor" if "Valor" in df_financeiro.columns else (df_financeiro.columns[1] if len(df_financeiro.columns) > 1 else None)
+        
+        if col_valor_fin:
+            valores_limpos = df_financeiro[col_valor_fin].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+            valores_numericos = pd.to_numeric(valores_limpos, errors="coerce")
+            st.metric(label="Faturamento Total Acumulado (R$)", value=f"R$ {valores_numericos.sum():,.2f}")
+            
+        st.dataframe(df_financeiro, use_container_width=True, hide_index=True)
+    else:
+        st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos ou vazia.")
 
 # --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
@@ -542,7 +535,7 @@ elif menu == "👤 Perfil":
                     fig_idades = px.bar(df_faixas, x="Faixa Etária", y="Alunos", text="Alunos", color_discrete_sequence=["#2E5A44"])
                     st.plotly_chart(fig_idades, use_container_width=True)
     else:
-        st.info("Gráficos indisponíveis.")
+        st.info("Dados gráficos insuficientes.")
 
 # --- 7. TELA: MAPA ---
 elif menu == "🗺️ Mapa":
@@ -579,6 +572,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                 st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
             
+            # Ajustado para exibir o 'Valor Plano' na ficha de impressão
             conteudo_html = f"""
             <div class="print-container" style="border: 2px solid #2E5A44; padding: 30px; border-radius: 10px; background-color: #ffffff; color: #000000; font-family: Arial, sans-serif;">
                 <div style="text-align: center; margin-bottom: 25px;">
@@ -597,7 +591,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold;">Plano Atual:</td>
-                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor', '0,00')}</td>
+                        <td style="padding: 8px;">{ficha.get('Plano', 'Não Informado')} - R$ {ficha.get('Valor Plano', '0,00')}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold;">Dias/Horários fixos:</td>
@@ -609,7 +603,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                     </tr>
                     <tr>
                         <td style="padding: 8px; font-weight: bold; vertical-align: top;">Diretrizes de Conduta Técnica:</td>
-                        <td style="padding: 8px; font-style: italic;">{ficha.get('Conduta', 'Sem restrições especificadas')}</td>
+                        <td style="padding: 8px; font-style: italic;">{ficha.get('Conduta', 'Sem restrições')}</td>
                     </tr>
                 </table>
             </div>
