@@ -384,16 +384,16 @@ elif menu == "📝 Cadastro":
         dias_c = "/".join(dias_lista)
         
         st.markdown("**Selecione os Horários Fixos:**")
+        # ALTERAÇÃO SOLICITADA: Grade horária corrigida do Studio Highline
         lista_horarios_disponiveis = [
-            "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", 
-            "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", 
-            "18:00", "19:00", "20:00"
+            "7:30", "8:30", "9:30", "10:30", "11:30", "12:30", 
+            "15:30", "16:30", "17:30", "18:30", "19:30"
         ]
         
-        cols_horarios = st.columns(5)
+        cols_horarios = st.columns(6)
         horarios_selecionados = []
         for index, hora_item in enumerate(lista_horarios_disponiveis):
-            with cols_horarios[index % 5]:
+            with cols_horarios[index % 6]:
                 if st.checkbox(hora_item, key=f"check_h_{hora_item}"):
                     horarios_selecionados.append(hora_item)
         horario_c = ", ".join(horarios_selecionados)
@@ -585,7 +585,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -664,12 +664,9 @@ elif menu == "👤 Perfil":
                     plot_bgcolor="rgba(0,0,0,0)",
                     yaxis_title="Quantidade de Alunos (Pagantes)",
                     xaxis_title="Dia do Vencimento",
-                    margin=dict(t=80, b=50) # Aumentado o topo (t=80) para dar teto ao texto maior
+                    margin=dict(t=80, b=50)
                 )
                 
-                # AJUSTES DE NITIDEZ E LEITURA CRÍTICA:
-                # - size=18 (Fonte bem maior e legível)
-                # - cliponaxis=False (Impede que o Plotly diminua a fonte para caber na escala)
                 fig_faturamento.update_traces(
                     textposition='outside', 
                     textangle=-90, 
