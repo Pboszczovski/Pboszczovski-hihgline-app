@@ -326,8 +326,10 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
             bloqueio_edicao = False
-            # CORREÇÃO EFETUADA AQUI (Mapeamento de conflito real com parênteses e indentação correta)
-            if novos_dias and (Profiler_horario := novo_horario):
+            
+            # --- CORREÇÃO DO OPERADOR WALRUS E DA INDENTAÇÃO REALIZADA AQUI ---
+            if novos_dias and novo_horario:
+                Profiler_horario = novo_horario
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, Profiler_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -633,9 +635,7 @@ elif menu == "👤 Perfil":
                             faturamento_por_dia[venc] += val
                     except:
                         continue
-                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado (R$)"])
-                
-                # FINALIZAÇÃO DO GRÁFICO CORTADO:
-                fig_fat = px.line(df_faturamento, x="Dia do Vencimento", y="Faturamento Projetado (R$)", markers=True, color_discrete_sequence=["#2E5A44"])
-                fig_fat.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=1))
-                st.plotly_chart(fig_fat, use_container_width=True)
+                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
+                fig_faturamento = px.line(df_faturamento, x="Dia do Vencimento", y="Faturamento Projetado", markers=True, color_discrete_sequence=["#2E5A44"])
+                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=2))
+                st.plotly_chart(fig_faturamento, use_container_width=True)
