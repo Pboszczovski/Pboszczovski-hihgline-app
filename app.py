@@ -585,7 +585,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -664,14 +664,17 @@ elif menu == "👤 Perfil":
                     plot_bgcolor="rgba(0,0,0,0)",
                     yaxis_title="Quantidade de Alunos (Pagantes)",
                     xaxis_title="Dia do Vencimento",
-                    margin=dict(t=50, b=50) # Espaço adicional para os textos verticais não cortarem
+                    margin=dict(t=80, b=50) # Aumentado o topo (t=80) para dar teto ao texto maior
                 )
                 
-                # ALTERAÇÃO SOLICITADA: Texto na vertical (angle=-90), tamanho 14 e negrito para fácil leitura
+                # AJUSTES DE NITIDEZ E LEITURA CRÍTICA:
+                # - size=18 (Fonte bem maior e legível)
+                # - cliponaxis=False (Impede que o Plotly diminua a fonte para caber na escala)
                 fig_faturamento.update_traces(
                     textposition='outside', 
                     textangle=-90, 
-                    textfont=dict(size=14, family="Arial", color="black", weight="bold")
+                    cliponaxis=False,
+                    textfont=dict(size=18, family="Arial", color="black", weight="bold")
                 )
                 fig_faturamento.update_xaxes(type="category")
                 
