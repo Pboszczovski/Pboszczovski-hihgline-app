@@ -731,73 +731,47 @@ elif menu == "📁 Arquivo Morto":
 # --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Impressão de Fichas e Anamnese")
-    st.markdown("Selecione um aluno da base de dados para gerar a visualização de prontuário clínico otimizada para impressão física ou PDF.")
+    st.markdown("Selecione um aluno para gerar o prontuário clínico para impressão.")
     
     if df_alunos is not None and not df_alunos.empty and "Nome" in df_alunos.columns:
         lista_todos = sorted(df_alunos["Nome"].dropna().unique().tolist())
-        aluno_selecionado = st.selectbox("Selecione o Aluno para Emitir:", ["-- Escolha o Aluno --"] + lista_todos)
+        aluno_selecionado = st.selectbox("Selecione o Aluno:", ["-- Escolha o Aluno --"] + lista_todos)
         
         if aluno_selecionado != "-- Escolha o Aluno --":
-            dados_aluno = df_alunos[df_alunos["Nome"] == aluno_selecionado].iloc[0]
+            dados = df_alunos[df_alunos["Nome"] == aluno_selecionado].iloc[0]
             
-            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (ou Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div class="print-container" style="border: 1px solid #ccc; padding: 30px; background-color: #fff; color: #000; border-radius: 5px;">
-                <div style="text-align: center; border-bottom: 2px solid #2E5A44; padding-bottom: 15px; margin-bottom: 20px;">
-                    <h2 style="margin: 0; color: #2E5A44;">STUDIO HIGHLINE PILATES</h2>
-                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">Ficha Cadastral, Anamnese e Prontuário do Aluno</p>
-                </div>
-                
-                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; width: 15%;">Nome:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;" colspan="3">{dados_aluno.get('Nome', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">WhatsApp:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; width: 35%;">{dados_aluno.get('Telefone', '-')}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; width: 15%;">CPF:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; width: 35%;">{dados_aluno.get('CPF', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Nascimento:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Nascimento', '-')}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Gênero:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Genero', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Endereço:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;" colspan="3">{dados_aluno.get('Endereco', '-')} (Bairro: {dados_aluno.get('Bairro', '-')})</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Plano:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Plano', '-')}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Horário/Dias:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Horario', '-')} - {dados_aluno.get('Dias', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Início Aulas:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Inicio_Aulas', '-')}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Status:</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Status', '-')}</td>
-                    </tr>
-                </table>
-                
-                <div style="margin-top: 25px;">
-                    <h3 style="color: #2E5A44; border-bottom: 1px solid #2E5A44; padding-bottom: 5px; margin-bottom: 10px;">📋 Histórico de Queixas e Sintomas</h3>
-                    <p style="font-size: 14px; background-color: #f9f9f9; padding: 12px; border-radius: 4px; line-height: 1.5; color: #000;">{dados_aluno.get('Queixa', 'Sem queixas registradas.')}</p>
-                </div>
-                
-                <div style="margin-top: 25px;">
-                    <h3 style="color: #2E5A44; border-bottom: 1px solid #2E5A44; padding-bottom: 5px; margin-bottom: 10px;">🛠️ Diretrizes de Conduta e Restrições</h3>
-                    <p style="font-size: 14px; background-color: #f9f9f9; padding: 12px; border-radius: 4px; line-height: 1.5; color: #000;">{dados_aluno.get('Conduta', 'Nenhuma restrição ou conduta específica registrada.')}</p>
-                </div>
-                
-                <div style="margin-top: 60px; text-align: center;">
-                    <p style="font-size: 12px; color: #777;">Documento emitido via sistema de gestão Highline em {datetime.now().strftime('%d/%m/%Y às %H:%M')}</p>
-                </div>
-            </div>
+            # CSS para ocultar elementos desnecessários na impressão
+            st.markdown("""
+                <style>
+                @media print {
+                    .stSidebar, .stButton, .stSelectbox, .stTextInput, header { display: none !important; }
+                    .print-container { border: none !important; padding: 0 !important; }
+                }
+                </style>
             """, unsafe_allow_html=True)
+            
+            # Estrutura HTML limpa e formatada
+            html_prontuario = f"""
+            <div class="print-container" style="padding: 20px; font-family: Arial, sans-serif; border: 1px solid #ddd;">
+                <h2 style="color: #2E5A44; text-align: center;">STUDIO HIGHLINE PILATES</h2>
+                <h4 style="text-align: center;">Ficha Cadastral e Prontuário</h4>
+                <hr>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    <tr><td style="padding: 8px; border: 1px solid #ccc; font-weight: bold;">Nome:</td><td style="padding: 8px; border: 1px solid #ccc;">{dados.get('Nome', '')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ccc; font-weight: bold;">WhatsApp:</td><td style="padding: 8px; border: 1px solid #ccc;">{dados.get('Telefone', '')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ccc; font-weight: bold;">Plano:</td><td style="padding: 8px; border: 1px solid #ccc;">{dados.get('Plano', '')}</td></tr>
+                    <tr><td style="padding: 8px; border: 1px solid #ccc; font-weight: bold;">Dias/Horário:</td><td style="padding: 8px; border: 1px solid #ccc;">{dados.get('Dias', '')} - {dados.get('Horario', '')}</td></tr>
+                </table>
+                <h4 style="color: #2E5A44;">Queixas</h4>
+                <p style="padding: 10px; background-color: #f4f4f4;">{dados.get('Queixa', 'Sem queixas.')}</p>
+                <h4 style="color: #2E5A44;">Conduta</h4>
+                <p style="padding: 10px; background-color: #f4f4f4;">{dados.get('Conduta', 'Sem restrições.')}</p>
+            </div>
+            """
+            
+            # Renderização correta com unsafe_allow_html=True
+            st.markdown(html_prontuario, unsafe_allow_html=True)
+            
+            st.info("💡 Use Ctrl+P para imprimir esta ficha.")
     else:
-        st.info("Nenhuma base de alunos disponível no momento.")
+        st.warning("Base de alunos indisponível.")
