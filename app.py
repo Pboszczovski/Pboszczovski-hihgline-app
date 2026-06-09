@@ -345,7 +345,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -358,62 +358,64 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: CADASTRO ---
+# --- 3. TELA: CADASTRO (ESTRUTURA REATIVADA FORA DO FORM) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    with st.form("form_novo_aluno_anamnese_avancada"):
-        st.subheader("📌 Escolha de Dias e Horários de Treino")
-        
-        st.markdown("**Selecione os Dias Semanais:**")
-        c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
-        with c_dia1: d_seg = st.checkbox("SEG")
-        with c_dia2: d_ter = st.checkbox("TER")
-        with c_dia3: d_qua = st.checkbox("QUA")
-        with c_dia4: d_qui = st.checkbox("QUI")
-        with c_dia5: d_sex = st.checkbox("SEX")
-        with c_dia6: d_sab = st.checkbox("SAB")
-        
-        dias_lista = []
-        if d_seg: dias_lista.append("SEG")
-        if d_ter: dias_lista.append("TER")
-        if d_qua: dias_lista.append("QUA")
-        if d_qui: dias_lista.append("QUI")
-        if d_sex: dias_lista.append("SEX")
-        if d_sab: dias_lista.append("SAB")
-        dias_c = "/".join(dias_lista)
-        
-        st.markdown("**Selecione os Horários Fixos:**")
-        # ALTERAÇÃO SOLICITADA: Grade horária corrigida do Studio Highline
-        lista_horarios_disponiveis = [
-            "7:30", "8:30", "9:30", "10:30", "11:30", "12:30", 
-            "15:30", "16:30", "17:30", "18:30", "19:30"
-        ]
-        
-        cols_horarios = st.columns(6)
-        horarios_selecionados = []
-        for index, hora_item in enumerate(lista_horarios_disponiveis):
-            with cols_horarios[index % 6]:
-                if st.checkbox(hora_item, key=f"check_h_{hora_item}"):
-                    horarios_selecionados.append(hora_item)
-        horario_c = ", ".join(horarios_selecionados)
+    # MELHORIA CRÍTICA: Dias, Horários e Plano agora rodam FORA do formulário para garantir reatividade imediata do preço e validação
+    st.subheader("📌 Escolha de Dias e Horários de Treino")
+    
+    st.markdown("**Selecione os Dias Semanais:**")
+    c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
+    with c_dia1: d_seg = st.checkbox("SEG")
+    with c_dia2: d_ter = st.checkbox("TER")
+    with c_dia3: d_qua = st.checkbox("QUA")
+    with c_dia4: d_qui = st.checkbox("QUI")
+    with c_dia5: d_sex = st.checkbox("SEX")
+    with c_dia6: d_sab = st.checkbox("SAB")
+    
+    dias_lista = []
+    if d_seg: dias_lista.append("SEG")
+    if d_ter: dias_lista.append("TER")
+    if d_qua: dias_lista.append("QUA")
+    if d_qui: dias_lista.append("QUI")
+    if d_sex: dias_lista.append("SEX")
+    if d_sab: dias_lista.append("SAB")
+    dias_c = "/".join(dias_lista)
+    
+    st.markdown("**Selecione os Horários Fixos:**")
+    lista_horarios_disponiveis = [
+        "7:30", "8:30", "9:30", "10:30", "11:30", "12:30", 
+        "15:30", "16:30", "17:30", "18:30", "19:30"
+    ]
+    
+    cols_horarios = st.columns(6)
+    horarios_selecionados = []
+    for index, hora_item in enumerate(lista_horarios_disponiveis):
+        with cols_horarios[index % 6]:
+            if st.checkbox(hora_item, key=f"reactive_h_{hora_item}"):
+                horarios_selecionados.append(hora_item)
+    horario_c = ", ".join(horarios_selecionados)
 
-        bloqueio_cadastro = False
-        if dias_c and horarios_selecionados:
-            conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
-            if conflitos:
-                bloqueio_cadastro = True
-                for dia_lotado, hora_lotada, qtd in conflitos:
-                    st.error(f"🛑 Atenção: O dia {dia_lotado} às {hora_lotada} já possui {qtd}/3 alunos (Limite atingido).")
+    bloqueio_cadastro = False
+    if dias_c and horarios_selecionados:
+        conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
+        if conflitos:
+            bloqueio_cadastro = True
+            for dia_lotado, hora_lotada, qtd in conflitos:
+                st.error(f"🛑 Atenção: O dia {dia_lotado} às {hora_lotada} já possui {qtd}/3 alunos (Limite atingido).")
 
-        st.subheader("1. Dados Pessoais e de Contrato")
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
-        with col_p2:
-            valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
-            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
+    st.subheader("1. Dados Pessoais e de Contrato")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+    with col_p2:
+        # Reatividade pura: ao alterar o selectbox acima, o valor padrão atualiza na hora na tela!
+        valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
+        valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
 
+    # O formulário agora guarda apenas os campos de texto estáticos e o gatilho de gravação
+    with st.form("form_dados_anamnese_limpo"):
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
         with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
@@ -465,12 +467,16 @@ elif menu == "📝 Cadastro":
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
-        if bloqueio_cadastro or not dias_c or not horario_c:
-            texto_botao = "Marque Dias e Horários válidos" if (not dias_c or not horario_c) else "Cadastro Bloqueado (Lotação máxima detectada)"
-            st.form_submit_button(texto_botao, disabled=True)
+        # Validação do botão inteligente
+        if bloqueio_cadastro:
+            st.form_submit_button("Cadastro Bloqueado (Lotação Máxima Detectada)", disabled=True)
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno"):
-                if nome_c and tel_c:
+                if not dias_c or not horario_c:
+                    st.error("❌ Por favor, selecione pelo menos um Dia e um Horário de aula antes de salvar!")
+                elif not nome_c or not tel_c:
+                    st.error("❌ Por favor, preencha o Nome Completo e o WhatsApp do aluno!")
+                else:
                     checkpoint_queixas = []
                     if q_lombar: checkpoint_queixas.append("Dor Lombar")
                     if q_cervical: checkpoint_queixas.append("Dor Cervical")
