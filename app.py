@@ -110,21 +110,11 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # GESTÃO INTELIGENTE DE PREÇOS: Tenta ler; se não existir, cria a aba no Sheets
+    # Tenta ler a aba de preços personalizada do Google Sheets
     try:
         df_precos = limpar_dataframe(conn.read(worksheet="precos"))
     except Exception:
-        # Se a aba não existir, criamos o esqueleto padrão e enviamos para o Sheets
-        df_precos = pd.DataFrame([
-            {"Plano": "1x semana", "Valor": 180.0},
-            {"Plano": "2x semana", "Valor": 220.0},
-            {"Plano": "3x semana", "Valor": 300.0}
-        ])
-        try:
-            conn.update(worksheet="precos", data=df_precos)
-            st.toast("⚙️ Aba 'precos' criada automaticamente no seu Google Sheets!")
-        except:
-            pass # Previne travamentos caso as permissões de escrita falhem temporariamente
+        df_precos = None
 
     if df_alunos is not None and not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
@@ -140,7 +130,7 @@ try:
 except Exception as e:
     erro_msg = str(e)
 
-# Monta o dicionário dinâmico baseado no que está na planilha
+# Monta o dicionário dinâmico baseado na aba do Sheets
 dict_precos_padrao = {}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
     for _, r in df_precos.iterrows():
@@ -338,8 +328,7 @@ elif menu == "👥 Alunos":
             bloqueio_edicao = False
             
             if novos_dias and novo_horario:
-                Profiler_horario = novo_horario
-                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, Profiler_horario, aluno_ignorados=aluno_para_editar)
+                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
                     for dia_conf, qtd in conflitos_ed:
@@ -362,7 +351,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated successfully!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -571,7 +560,9 @@ elif menu == "💰 Financeiro":
     with f_col2:
         st.markdown(f'<div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828;"><p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p><h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2></div>', unsafe_allow_html=True)
         
-    st.markdown("<br>### 📥 Dar Baixa em Pagamentos (Busca Universal)")
+    st.write("") 
+    st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
+    
     if df_alunos is not None and not df_alunos.empty:
         alunos_ativos = df_alunos[df_alunos["Status"].astype(str).str.strip().str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos
         if not alunos_ativos.empty:
@@ -590,7 +581,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -598,7 +589,9 @@ elif menu == "💰 Financeiro":
                 st.cache_data.clear()
                 st.rerun()
 
-    st.markdown("<br>### 📋 Histórico Geral de Transações")
+    st.write("")
+    st.markdown("### 📋 Histórico Geral de Transações")
+    
     if df_financeiro is not None and not df_financeiro.empty:
         df_financeiro_visivel = df_financeiro[[c for c in df_financeiro.columns if c != "Valor_Num"]].copy()
         if "Valor" in df_financeiro_visivel.columns: df_financeiro_visivel["Valor"] = df_financeiro_visivel["Valor"].apply(formatar_brl)
@@ -762,4 +755,4 @@ elif menu == "🖨️ Imprimir Prontuário":
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Nenhuma base de alunos disponível para imagem ou emissão.")
+        st.info("Nenhuma base de alunos disponível para imagem ou recebimento.")
