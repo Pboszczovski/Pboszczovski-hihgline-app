@@ -96,6 +96,7 @@ def converter_para_float(valor):
 # ==========================================
 conexao_ok = False
 erro_msg = ""
+df_precos = None  # Inicialização segura para evitar o erro da imagem 2
 
 try:
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
@@ -106,7 +107,6 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Adicionado ttl=0 para forçar leitura em tempo real e evitar cache travado
     df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=0))
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=0))
     df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=0))
@@ -298,12 +298,10 @@ elif menu == "👥 Alunos":
     st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
     
     if "Nome" in df_ativos.columns and not df_ativos.empty:
-        # CORREÇÃO: Menu de seleção estruturado por Índice Único para evitar conflitos com duplicados
         opcoes_alunos = ["-- Escolha um Aluno --"] + [f"{row['Nome']} (Reg: {idx})" for idx, row in df_ativos.iterrows()]
         aluno_selecionado_str = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", opcoes_alunos)
         
         if aluno_selecionado_str != "-- Escolha um Aluno --":
-            # Extraímos cirurgicamente o número real da linha da planilha
             idx_real_planilha = int(aluno_selecionado_str.split("(Reg: ")[1].replace(")", ""))
             dados_atuais = df_alunos.loc[idx_real_planilha]
             aluno_para_editar = dados_atuais["Nome"]
@@ -326,6 +324,7 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
+            # CORREÇÃO DA IMAGEM 1: Removida a variável 'width' fantasma que não existia
             if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
@@ -356,10 +355,7 @@ elif menu == "👥 Alunos":
                 
             if btn_inativar_alt:
                 idx_inteiro = int(idx_real_planilha)
-                # Alteração protegida por ID único
                 df_alunos.at[idx_inteiro, "Status"] = "Inativo"
-                
-                # Proteção extra: remove linhas fantasmas nulas antes do envio
                 df_alunos = df_alunos.dropna(subset=["Nome"])
                 
                 conn.update(worksheet="alunos", data=df_alunos)
@@ -607,7 +603,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
