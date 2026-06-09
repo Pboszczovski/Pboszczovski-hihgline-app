@@ -637,5 +637,5 @@ elif menu == "👤 Perfil":
                         continue
                 df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
                 fig_faturamento = px.line(df_faturamento, x="Dia do Vencimento", y="Faturamento Projetado", markers=True, color_discrete_sequence=["#2E5A44"])
-                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=2))
+                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode='linear', tick0=1, dtick=1))
                 st.plotly_chart(fig_faturamento, use_container_width=True)
