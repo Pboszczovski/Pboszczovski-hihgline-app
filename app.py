@@ -106,12 +106,13 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    df_alunos = limpar_dataframe(conn.read(worksheet="alunos"))
-    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
-    df_espera = limpar_dataframe(conn.read(worksheet="espera"))
+    # Adicionado ttl=0 para forçar leitura em tempo real e evitar cache travado
+    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=0))
+    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=0))
+    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=0))
     
     try:
-        df_precos = limpar_dataframe(conn.read(worksheet="precos"))
+        df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=0))
     except Exception:
         df_precos = None
 
@@ -297,11 +298,15 @@ elif menu == "👥 Alunos":
     st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
     
     if "Nome" in df_ativos.columns and not df_ativos.empty:
-        aluno_para_editar = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", ["-- Escolha um Aluno --"] + df_ativos["Nome"].tolist())
+        # CORREÇÃO: Menu de seleção estruturado por Índice Único para evitar conflitos com duplicados
+        opcoes_alunos = ["-- Escolha um Aluno --"] + [f"{row['Nome']} (Reg: {idx})" for idx, row in df_ativos.iterrows()]
+        aluno_selecionado_str = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", opcoes_alunos)
         
-        if aluno_para_editar != "-- Escolha um Aluno --":
-            idx_real_planilha = df_alunos[df_alunos["Nome"] == aluno_para_editar].index[0]
+        if aluno_selecionado_str != "-- Escolha um Aluno --":
+            # Extraímos cirurgicamente o número real da linha da planilha
+            idx_real_planilha = int(aluno_selecionado_str.split("(Reg: ")[1].replace(")", ""))
             dados_atuais = df_alunos.loc[idx_real_planilha]
+            aluno_para_editar = dados_atuais["Nome"]
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
@@ -321,7 +326,6 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
-            # --- CORREÇÃO DA LINHA 324 AQUI (Remoção do 'width' fantasma) ---
             if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
@@ -351,7 +355,13 @@ elif menu == "👥 Alunos":
                 st.rerun()
                 
             if btn_inativar_alt:
-                df_alunos.at[int(idx_real_planilha), "Status"] = "Inativo"
+                idx_inteiro = int(idx_real_planilha)
+                # Alteração protegida por ID único
+                df_alunos.at[idx_inteiro, "Status"] = "Inativo"
+                
+                # Proteção extra: remove linhas fantasmas nulas antes do envio
+                df_alunos = df_alunos.dropna(subset=["Nome"])
+                
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("❌ Aluno arquivado com sucesso!")
                 st.cache_data.clear()
@@ -577,7 +587,6 @@ elif menu == "💰 Financeiro":
         st.markdown(f'<div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828;"><p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p><h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2></div>', unsafe_allow_html=True)
         
     st.write("") 
-    # --- FORMATAÇÃO CORRIGIDA AQUI (Removido o <br>### bruto) ---
     st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
     
     if df_alunos is not None and not df_alunos.empty:
@@ -598,7 +607,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -607,7 +616,6 @@ elif menu == "💰 Financeiro":
                 st.rerun()
 
     st.write("")
-    # --- FORMATAÇÃO CORRIGIDA AQUI ---
     st.markdown("### 📋 Histórico Geral de Transações")
     
     if df_financeiro is not None and not df_financeiro.empty:
@@ -735,7 +743,7 @@ elif menu == "🖨️ Imprimir Prontuário":
         if aluno_selecionado != "-- Escolha o Aluno --":
             dados_aluno = df_alunos[df_alunos["Nome"] == aluno_selecionado].iloc[0]
             
-            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (or Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
+            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (ou Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
             
             st.markdown(f"""
             <div class="print-container" style="border: 1px solid #ccc; padding: 30px; background-color: #fff; color: #000; border-radius: 5px;">
