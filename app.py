@@ -327,7 +327,6 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
-            # --- CORREÇÃO DO OPERADOR WALRUS E DA INDENTAÇÃO REALIZADA AQUI ---
             if novos_dias and novo_horario:
                 Profiler_horario = novo_horario
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, Profiler_horario, aluno_ignorados=aluno_para_editar)
@@ -581,7 +580,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -636,6 +635,15 @@ elif menu == "👤 Perfil":
                     except:
                         continue
                 df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
-                fig_faturamento = px.line(df_faturamento, x="Dia do Vencimento", y="Faturamento Projetado", markers=True, color_discrete_sequence=["#2E5A44"])
-                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode='linear', tick0=1, dtick=1))
+                
+                # --- GRÁFICO ALTERADO DE px.line PARA px.bar ---
+                fig_faturamento = px.bar(
+                    df_faturamento, 
+                    x="Dia do Vencimento", 
+                    y="Faturamento Projetado", 
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)")
+                fig_faturamento.update_xaxes(type="category") # Garante o alinhamento correto das colunas por dia
+                
                 st.plotly_chart(fig_faturamento, use_container_width=True)
