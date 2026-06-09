@@ -110,7 +110,6 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # Tenta ler a aba de preços personalizada do Google Sheets
     try:
         df_precos = limpar_dataframe(conn.read(worksheet="precos"))
     except Exception:
@@ -130,7 +129,6 @@ try:
 except Exception as e:
     erro_msg = str(e)
 
-# Monta o dicionário dinâmico baseado na aba do Sheets
 dict_precos_padrao = {}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
     for _, r in df_precos.iterrows():
@@ -141,7 +139,7 @@ else:
 # ==========================================
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
 # ==========================================
-def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
+def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None):
     if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
         return [], []
         
@@ -149,33 +147,29 @@ def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
     if aluno_ignorados:
         df_ativos = df_ativos[df_ativos["Nome"] != aluno_ignorados]
         
-    h_alvo = str(horario_input).strip()
-    if not h_alvo or not dias_input:
+    dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
+    horarios_solicitados = [str(h).strip() for h in horarios_input_list if str(h).strip()]
+    
+    if not horarios_solicitados or not dias_solicitados:
         return [], []
         
-    dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
-    
     conflitos = []
     alunos_no_horario = []
     
-    for idx, row in df_ativos.iterrows():
-        h_atual = str(row["Horario"]).strip()
-        if h_atual == h_alvo:
-            d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
-            dias_comuns = set(dias_solicitados).intersection(set(d_atual))
-            if dias_comuns:
-                alunos_no_horario.append(f"{row['Nome']} ({row['Dias']})")
+    for h_alvo in horarios_solicitados:
+        for dia in dias_solicitados:
+            qtd_no_bloco = 0
+            for idx, row in df_ativos.iterrows():
+                h_atual = str(row["Horario"]).strip()
+                if h_atual == h_alvo:
+                    d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
+                    if dia in d_atual:
+                        qtd_no_bloco += 1
+                        if f"{row['Nome']} ({row['Dias']} às {row['Horario']})" not in alunos_no_horario:
+                            alunos_no_horario.append(f"{row['Nome']} ({row['Dias']} às {row['Horario']})")
+            if qtd_no_bloco >= 3:
+                conflitos.append((dia, h_alvo, qtd_no_bloco))
                 
-    for dia in dias_solicitados:
-        qtd_no_dia = 0
-        for idx, row in df_ativos.iterrows():
-            if str(row["Horario"]).strip() == h_alvo:
-                d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
-                if dia in d_atual:
-                    qtd_no_dia += 1
-        if qtd_no_dia >= 3:
-            conflitos.append((dia, qtd_no_dia))
-            
     return conflitos, alunos_no_horario
 
 # ==========================================
@@ -328,11 +322,11 @@ elif menu == "👥 Alunos":
             bloqueio_edicao = False
             
             if novos_dias and novo_horario:
-                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
+                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
-                    for dia_conf, qtd in conflitos_ed:
-                        st.error(f"❌ Horário lotado em {dia_conf} ({qtd}/3 alunos).")
+                    for dia_conf, hora_conf, qtd in conflitos_ed:
+                        st.error(f"❌ Horário lotado em {dia_conf} às {hora_conf} ({qtd}/3 alunos).")
             
             with c_ed3:
                 st.markdown("**Ações Disponíveis:**")
@@ -351,7 +345,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -368,48 +362,61 @@ elif menu == "👥 Alunos":
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    st.subheader("📌 Personalização de Horários")
-    col_dias, col_hora = st.columns(2)
-    
-    with col_dias:
-        dias_selecionados = st.multiselect(
-            "Dias de Aula Desejados:",
-            ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"],
-            placeholder="Escolha os dias..."
-        )
-        dias_c = "/".join(dias_selecionados) if dias_selecionados else ""
-        
-    with col_hora:
-        lista_horarios = [
-            "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", 
-            "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-            "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
-            "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
-            "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"
-        ]
-        horario_c = st.selectbox("Horário Escolhido:", ["-- Selecione um Horário --"] + lista_horarios)
-        if horario_c == "-- Selecione um Horário --":
-            horario_c = ""
-        
-    bloqueio_cadastro = False
-    if dias_c and horario_c:
-        conflitos, alunos_existentes = verificar_lotacao(df_alunos, dias_c, horario_c)
-        if conflitos:
-            bloqueio_cadastro = True
-            for dia_lotado, qtd in conflitos:
-                st.error(f"🛑 O dia {dia_lotado} às {horario_c} já está lotado ({qtd}/3 alunos).")
-        else:
-            st.success(f"✅ Horário totalmente disponível.")
-
-    st.subheader("1. Dados Pessoais e de Contrato")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
-    with col_p2:
-        valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
-        valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
-
+    # 1. AJUSTE: Transformado em Checkboxes de Dias e Horários dentro do Form
     with st.form("form_novo_aluno_anamnese_avancada"):
+        st.subheader("📌 Escolha de Dias e Horários de Treino")
+        
+        st.markdown("**Selecione os Dias Semanais:**")
+        c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
+        with c_dia1: d_seg = st.checkbox("SEG")
+        with c_dia2: d_ter = st.checkbox("TER")
+        with c_dia3: d_qua = st.checkbox("QUA")
+        with c_dia4: d_qui = st.checkbox("QUI")
+        with c_dia5: d_sex = st.checkbox("SEX")
+        with c_dia6: d_sab = st.checkbox("SAB")
+        
+        dias_lista = []
+        if d_seg: dias_lista.append("SEG")
+        if d_ter: dias_lista.append("TER")
+        if d_qua: dias_lista.append("QUA")
+        if d_qui: dias_lista.append("QUI")
+        if d_sex: dias_lista.append("SEX")
+        if d_sab: dias_lista.append("SAB")
+        dias_c = "/".join(dias_lista)
+        
+        st.markdown("**Selecione os Horários Fixos:**")
+        lista_horarios_disponiveis = [
+            "06:00", "07:00", "08:00", "09:00", "10:00", "11:00", 
+            "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", 
+            "18:00", "19:00", "20:00"
+        ]
+        
+        # Grid para renderizar os checkboxes de horário de forma limpa e compacta
+        cols_horarios = st.columns(5)
+        horarios_selecionados = []
+        for index, hora_item in enumerate(lista_horarios_disponiveis):
+            with cols_horarios[index % 5]:
+                if st.checkbox(hora_item, key=f"check_h_{hora_item}"):
+                    horarios_selecionados.append(hora_item)
+        horario_c = ", ".join(horarios_selecionados)
+
+        # Validação dinâmica integrada interna ao clique
+        bloqueio_cadastro = False
+        if dias_c and horarios_selecionados:
+            conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
+            if conflitos:
+                bloqueio_cadastro = True
+                for dia_lotado, hora_lotada, qtd in conflitos:
+                    st.error(f"🛑 Atenção: O dia {dia_lotado} às {hora_lotada} já possui {qtd}/3 alunos (Limite atingido).")
+
+        st.subheader("1. Dados Pessoais e de Contrato")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+        with col_p2:
+            valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
+            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
+
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
         with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
@@ -462,7 +469,7 @@ elif menu == "📝 Cadastro":
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
         if bloqueio_cadastro or not dias_c or not horario_c:
-            texto_botao = "Preencha Dias e Horário acima" if (not dias_c or not horario_c) else "Cadastro Bloqueado devido à Lotação"
+            texto_botao = "Marque Dias e Horários válidos" if (not dias_c or not horario_c) else "Cadastro Bloqueado (Lotação máxima detectada)"
             st.form_submit_button(texto_botao, disabled=True)
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno"):
@@ -626,26 +633,46 @@ elif menu == "👤 Perfil":
                     df_faixas = pd.cut(pd.DataFrame({"Idade": idades})["Idade"], bins=[0, 25, 35, 45, 55, 65, 120], labels=["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]).value_counts().reset_index()
                     st.plotly_chart(px.bar(df_faixas, x="Idade", y="count", text="count", color_discrete_sequence=["#2E5A44"]).update_layout(plot_bgcolor="rgba(0,0,0,0)"), use_container_width=True)
         with g_col4:
-            st.markdown("### Faturamento Projetado por Dia do Mês")
+            # 2. AJUSTE: Gráfico de previsão de faturamento por vencimento alterado
+            st.markdown("### Previsão de Faturamento (Alunos p/ Dia e R$ Esperados)")
             if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
+                alunos_por_dia = {dia: 0 for dia in range(1, 32)}
+                
                 for _, row in df_ativos.iterrows():
                     try:
                         venc = int(row["Vencimento"])
                         val = converter_para_float(row["Valor"])
                         if 1 <= venc <= 31:
                             faturamento_por_dia[venc] += val
+                            alunos_por_dia[venc] += 1
                     except:
                         continue
-                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
                 
+                # Criando DataFrame combinado
+                df_fat_ajustado = pd.DataFrame({
+                    "Dia do Vencimento": list(range(1, 32)),
+                    "Quantidade de Alunos": [alunos_por_dia[d] for d in range(1, 32)],
+                    "Faturamento Total": [faturamento_por_dia[d] for d in range(1, 32)]
+                })
+                
+                # Formatando os valores monetários em string para exibir em cima das barras
+                df_fat_ajustado["Texto_Valor"] = df_fat_ajustado["Faturamento Total"].apply(lambda x: formatar_brl(x) if x > 0 else "")
+                
+                # Eixo X: Dias, Eixo Y: Quantidade de Alunos, Rótulo das Barras: Valor Total Esperado
                 fig_faturamento = px.bar(
-                    df_faturamento, 
+                    df_fat_ajustado, 
                     x="Dia do Vencimento", 
-                    y="Faturamento Projetado", 
+                    y="Quantidade de Alunos", 
+                    text="Texto_Valor",
                     color_discrete_sequence=["#2E5A44"]
                 )
-                fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)")
+                fig_faturamento.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis_title="Quantidade de Alunos (Pagantes)",
+                    xaxis_title="Dia do Vencimento"
+                )
+                fig_faturamento.update_traces(textposition='outside', textfont_size=11)
                 fig_faturamento.update_xaxes(type="category")
                 
                 st.plotly_chart(fig_faturamento, use_container_width=True)
@@ -696,7 +723,6 @@ elif menu == "🖨️ Imprimir Prontuário":
             
             st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (ou Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
             
-            # Container estruturado para impressão limpa
             st.markdown(f"""
             <div class="print-container" style="border: 1px solid #ccc; padding: 30px; background-color: #fff; color: #000; border-radius: 5px;">
                 <div style="text-align: center; border-bottom: 2px solid #2E5A44; padding-bottom: 15px; margin-bottom: 20px;">
