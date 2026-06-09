@@ -96,7 +96,12 @@ def converter_para_float(valor):
 # ==========================================
 conexao_ok = False
 erro_msg = ""
-df_precos = None  # Inicialização segura para evitar o erro da imagem 2
+
+# Inicializações globais preventivas para evitar NameError se a cota estourar
+df_alunos = pd.DataFrame()
+df_financeiro = pd.DataFrame()
+df_espera = pd.DataFrame()
+df_precos = pd.DataFrame()
 
 try:
     if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
@@ -107,12 +112,13 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=0))
-    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=0))
-    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=0))
+    # TTL ajustado para 2 segundos para dar fôlego à API do Google e evitar erro 429
+    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=2))
+    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=2))
+    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=2))
     
     try:
-        df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=0))
+        df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=2))
     except Exception:
         df_precos = None
 
@@ -129,6 +135,9 @@ try:
     conexao_ok = True
 except Exception as e:
     erro_msg = str(e)
+    # Se estourar a cota, avisa amigavelmente sem travar o app completamente
+    if "429" in erro_msg or "Quota exceeded" in erro_msg:
+        st.warning("⚠️ O Google Sheets está recebendo muitas requisições simultâneas. Aguarde 5 segundos e atualize a página.")
 
 dict_precos_padrao = {}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
@@ -218,8 +227,8 @@ with st.sidebar:
     else:
         st.error("● Banco de Dados Offline")
 
-if not conexao_ok:
-    st.error(f"Erro crítico de configuração ou credenciais. Detalhes: {erro_msg}")
+if not conexao_ok and df_alunos.empty:
+    st.error(f"Erro crítico ao conectar com as planilhas: {erro_msg}")
     st.stop()
 
 # ==========================================
@@ -233,7 +242,7 @@ if menu == "📅 Agenda":
     hoje_mm_dd = hoje_datetime.strftime("%m-%d")
     niver_hoje = []
     
-    if "Nascimento" in df_alunos.columns and "Nome" in df_alunos.columns:
+    if df_alunos is not None and not df_alunos.empty and "Nascimento" in df_alunos.columns and "Nome" in df_alunos.columns:
         for idx, row in df_alunos.iterrows():
             try:
                 data_nasc = pd.to_datetime(row["Nascimento"], dayfirst=True)
@@ -259,9 +268,9 @@ if menu == "📅 Agenda":
     else:                       dias_validos_busca, nome_dia_formatado = ["DOM", "DOMINGO"], "Domingo"
 
     st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
         
-    if not df_ativos.empty:
+    if df_ativos is not None and not df_ativos.empty:
         if "Dias" in df_ativos.columns:
             condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
             df_agenda = df_ativos[condicao_dia]
@@ -282,88 +291,88 @@ if menu == "📅 Agenda":
 # --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
 
-    st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
-    busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
-    df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
-    
-    df_ativos_visivel = df_ativos_tabela.copy()
-    if "Valor" in df_ativos_visivel.columns:
-        df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
-    
-    st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
-
-    st.markdown("---")
-    st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
-    
-    if "Nome" in df_ativos.columns and not df_ativos.empty:
-        opcoes_alunos = ["-- Escolha um Aluno --"] + [f"{row['Nome']} (Reg: {idx})" for idx, row in df_ativos.iterrows()]
-        aluno_selecionado_str = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", opcoes_alunos)
+    if df_ativos is not None and not df_ativos.empty:
+        st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
+        busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
+        df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
         
-        if aluno_selecionado_str != "-- Escolha um Aluno --":
-            idx_real_planilha = int(aluno_selecionado_str.split("(Reg: ")[1].replace(")", ""))
-            dados_atuais = df_alunos.loc[idx_real_planilha]
-            aluno_para_editar = dados_atuais["Nome"]
+        df_ativos_visivel = df_ativos_tabela.copy()
+        if "Valor" in df_ativos_visivel.columns:
+            df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
+        
+        st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
+
+        st.markdown("---")
+        st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
+        
+        if "Nome" in df_ativos.columns and not df_ativos.empty:
+            opcoes_alunos = ["-- Escolha um Aluno --"] + [f"{row['Nome']} (Reg: {idx})" for idx, row in df_ativos.iterrows()]
+            aluno_selecionado_str = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", opcoes_alunos)
             
-            c_ed1, c_ed2, c_ed3 = st.columns(3)
-            with c_ed1:
-                options_planos = ["1x semana", "2x semana", "3x semana"]
-                plano_atual = dados_atuais.get("Plano", "1x semana")
-                idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
-                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
+            if aluno_selecionado_str != "-- Escolha um Aluno --":
+                idx_real_planilha = int(aluno_selecionado_str.split("(Reg: ")[1].replace(")", ""))
+                dados_atuais = df_alunos.loc[idx_real_planilha]
+                aluno_para_editar = dados_atuais["Nome"]
                 
-                valor_sugerido_bruto = dados_atuais.get("Valor", dict_precos_padrao.get(novo_plano, 220.0))
-                valor_sugerido_float = converter_para_float(valor_sugerido_bruto)
+                c_ed1, c_ed2, c_ed3 = st.columns(3)
+                with c_ed1:
+                    options_planos = ["1x semana", "2x semana", "3x semana"]
+                    plano_atual = dados_atuais.get("Plano", "1x semana")
+                    idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
+                    novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
                     
-                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
+                    valor_sugerido_bruto = dados_atuais.get("Valor", dict_precos_padrao.get(novo_plano, 220.0))
+                    valor_sugerido_float = converter_para_float(valor_sugerido_bruto)
+                        
+                    novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
+                    
+                with c_ed2:
+                    novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
+                    novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
+                    
+                bloqueio_edicao = False
                 
-            with c_ed2:
-                novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
-                novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
+                if novos_dias and novo_horario:
+                    conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
+                    if conflitos_ed:
+                        bloqueio_edicao = True
+                        for dia_conf, hora_conf, qtd in conflitos_ed:
+                            st.error(f"❌ Horário lotado em {dia_conf} às {hora_conf} ({qtd}/3 alunos).")
                 
-            bloqueio_edicao = False
-            
-            # CORREÇÃO DA IMAGEM 1: Removida a variável 'width' fantasma que não existia
-            if novos_dias and novo_horario:
-                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
-                if conflitos_ed:
-                    bloqueio_edicao = True
-                    for dia_conf, hora_conf, qtd in conflitos_ed:
-                        st.error(f"❌ Horário lotado em {dia_conf} às {hora_conf} ({qtd}/3 alunos).")
-            
-            with c_ed3:
-                st.markdown("**Ações Disponíveis:**")
-                btn_salvar_alt = st.button("💾 Gravar Alterações Diretamente", disabled=bloqueio_edicao)
-                btn_inativar_alt = st.button("❌ Desativar e Mover ao Arquivo Morto")
-            
-            if btn_salvar_alt and not bloqueio_edicao:
-                idx_inteiro = int(idx_real_planilha)
-                df_alunos["Valor"] = df_alunos["Valor"].astype(object)
+                with c_ed3:
+                    st.markdown("**Ações Disponíveis:**")
+                    btn_salvar_alt = st.button("💾 Gravar Alterações Diretamente", disabled=bloqueio_edicao)
+                    btn_inativar_alt = st.button("❌ Desativar e Mover ao Arquivo Morto")
                 
-                df_alunos.at[idx_inteiro, "Plano"] = novo_plano
-                df_alunos.at[idx_inteiro, "Valor"] = float(novo_valor)  
-                if "Valor Mensal" in df_alunos.columns:
-                    df_alunos.at[idx_inteiro, "Valor Mensal"] = float(novo_valor)
-                df_alunos.at[idx_inteiro, "Dias"] = novos_dias
-                df_alunos.at[idx_inteiro, "Horario"] = novo_horario
-                
-                conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
-                
-            if btn_inativar_alt:
-                idx_inteiro = int(idx_real_planilha)
-                df_alunos.at[idx_inteiro, "Status"] = "Inativo"
-                df_alunos = df_alunos.dropna(subset=["Nome"])
-                
-                conn.update(worksheet="alunos", data=df_alunos)
-                st.success("❌ Aluno arquivado com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
+                if btn_salvar_alt and not bloqueio_edicao:
+                    idx_inteiro = int(idx_real_planilha)
+                    df_alunos["Valor"] = df_alunos["Valor"].astype(object)
+                    
+                    df_alunos.at[idx_inteiro, "Plano"] = novo_plano
+                    df_alunos.at[idx_inteiro, "Valor"] = float(novo_valor)  
+                    if "Valor Mensal" in df_alunos.columns:
+                        df_alunos.at[idx_inteiro, "Valor Mensal"] = float(novo_valor)
+                    df_alunos.at[idx_inteiro, "Dias"] = novos_dias
+                    df_alunos.at[idx_inteiro, "Horario"] = novo_horario
+                    
+                    conn.update(worksheet="alunos", data=df_alunos)
+                    st.success("🎉 Planilha atualizada com sucesso!")
+                    st.cache_data.clear()
+                    st.rerun()
+                    
+                if btn_inativar_alt:
+                    idx_inteiro = int(idx_real_planilha)
+                    df_alunos.at[idx_inteiro, "Status"] = "Inativo"
+                    df_alunos = df_alunos.dropna(subset=["Nome"])
+                    
+                    conn.update(worksheet="alunos", data=df_alunos)
+                    st.success("❌ Aluno arquivado com sucesso!")
+                    st.cache_data.clear()
+                    st.rerun()
     else:
-        st.info("Nenhum aluno ativo disponível para gerenciamento.")
+        st.info("Nenhum aluno ativo disponível na base de dados no momento.")
 
 # --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
@@ -407,7 +416,7 @@ elif menu == "📝 Cadastro":
     horario_c = ", ".join(horarios_selecionados)
 
     bloqueio_cadastro = False
-    if dias_c and horarios_selecionados:
+    if dias_c and horarios_selecionados and df_alunos is not None and not df_alunos.empty:
         conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
         if conflitos:
             bloqueio_cadastro = True
@@ -520,12 +529,16 @@ elif menu == "📝 Cadastro":
                         "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
                         "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
                     }
-                    if "Valor Mensal" in df_alunos.columns:
+                    if df_alunos is not None and "Valor Mensal" in df_alunos.columns:
                         nova_linha["Valor Mensal"] = float(valor_c)
 
                     df_novo = pd.DataFrame([nova_linha])
-                    df_alunos["Valor"] = df_alunos["Valor"].astype(object)
-                    df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
+                    
+                    if df_alunos is not None and not df_alunos.empty:
+                        df_alunos["Valor"] = df_alunos["Valor"].astype(object)
+                        df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
+                    else:
+                        df_alunos_atualizado = df_novo
 
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     st.success(f"🎉 {nome_c} cadastrado com sucesso!")
@@ -603,7 +616,8 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
+                # CORREÇÃO: Variável corrigida de category_pagto para categoria_pagto para evitar erro na gravação
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -622,8 +636,8 @@ elif menu == "💰 Financeiro":
 # --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
-    if not df_ativos.empty:
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
+    if df_ativos is not None and not df_ativos.empty:
         g_col1, g_col2 = st.columns(2)
         with g_col1:
             st.markdown("### Alunos por Tipo de Plano")
