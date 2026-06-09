@@ -52,7 +52,7 @@ st.markdown("""
 # ==========================================
 def limpar_dataframe(df):
     if df is None or df.empty:
-        return df
+        return pd.DataFrame()
     df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
     df.columns = df.columns.str.strip()
     df.dropna(how="all", inplace=True)
@@ -97,7 +97,7 @@ def converter_para_float(valor):
 conexao_ok = False
 erro_msg = ""
 
-# Inicializações globais preventivas para evitar NameError se a cota estourar
+# Inicialização preventiva global para evitar NameError em caso de falha da API
 df_alunos = pd.DataFrame()
 df_financeiro = pd.DataFrame()
 df_espera = pd.DataFrame()
@@ -112,33 +112,29 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # TTL ajustado para 2 segundos para dar fôlego à API do Google e evitar erro 429
-    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=2))
-    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=2))
-    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=2))
-    
-    try:
-        df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=2))
-    except Exception:
-        df_precos = None
+    # Cache aumentado para 10 segundos para preservar cota e estabilizar a aplicação
+    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=10))
+    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=10))
+    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=10))
+    df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=10))
 
-    if df_alunos is not None and not df_alunos.empty:
+    if not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor Mensal"]
         elif "Valor Mensal" in df_alunos.columns and "Valor" in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Mensal"])
 
-    if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
+    if not df_espera.empty and "Nome" in df_espera.columns:
         df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
         df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
 
     conexao_ok = True
 except Exception as e:
     erro_msg = str(e)
-    # Se estourar a cota, avisa amigavelmente sem travar o app completamente
     if "429" in erro_msg or "Quota exceeded" in erro_msg:
         st.warning("⚠️ O Google Sheets está recebendo muitas requisições simultâneas. Aguarde 5 segundos e atualize a página.")
 
+# Mapeia os preços base padrão mesmo que a aba correspondente falhe
 dict_precos_padrao = {}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
     for _, r in df_precos.iterrows():
@@ -227,14 +223,6 @@ with st.sidebar:
     else:
         st.error("● Banco de Dados Offline")
 
-if not conexao_ok and df_alunos.empty:
-    st.error(f"Erro crítico ao conectar com as planilhas: {erro_msg}")
-    st.stop()
-
-# ==========================================
-# 4. TRATAMENTO DAS TELAS DO APP
-# ==========================================
-
 # --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos")
@@ -268,9 +256,9 @@ if menu == "📅 Agenda":
     else:                       dias_validos_busca, nome_dia_formatado = ["DOM", "DOMINGO"], "Domingo"
 
     st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else pd.DataFrame()
         
-    if df_ativos is not None and not df_ativos.empty:
+    if not df_ativos.empty:
         if "Dias" in df_ativos.columns:
             condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
             df_agenda = df_ativos[condicao_dia]
@@ -286,14 +274,14 @@ if menu == "📅 Agenda":
         else:
             st.warning(f"Nenhum aluno agendado para esta {nome_dia_formatado}.")
     else:
-        st.warning("Nenhum aluno ativo encontrado na base de dados.")
+        st.warning("Nenhum aluno ativo encontrado ou banco de dados indisponível temporariamente.")
 
 # --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else pd.DataFrame()
 
-    if df_ativos is not None and not df_ativos.empty:
+    if not df_ativos.empty:
         st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
         busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
         df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
@@ -329,12 +317,13 @@ elif menu == "👥 Alunos":
                     novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
                     
                 with c_ed2:
-                    novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
-                    novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
+                    novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=str(dados_atuais.get("Dias", "")))
+                    novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                     
                 bloqueio_edicao = False
                 
-                if novos_dias and novo_horario:
+                # Garantia de existência de variáveis antes da validação de regras de negócio
+                if novos_dias and novo_horario and not df_alunos.empty:
                     conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                     if conflitos_ed:
                         bloqueio_edicao = True
@@ -372,7 +361,7 @@ elif menu == "👥 Alunos":
                     st.cache_data.clear()
                     st.rerun()
     else:
-        st.info("Nenhum aluno ativo disponível na base de dados no momento.")
+        st.info("Nenhum aluno ativo disponível para gerenciamento no momento.")
 
 # --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
@@ -616,7 +605,6 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                # CORREÇÃO: Variável corrigida de category_pagto para categoria_pagto para evitar erro na gravação
                 nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
@@ -636,8 +624,8 @@ elif menu == "💰 Financeiro":
 # --- 6. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base Ativa")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else df_alunos
-    if df_ativos is not None and not df_ativos.empty:
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if (df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns) else pd.DataFrame()
+    if not df_ativos.empty:
         g_col1, g_col2 = st.columns(2)
         with g_col1:
             st.markdown("### Alunos por Tipo de Plano")
@@ -719,10 +707,9 @@ elif menu == "⚙️ Preços":
         if "Valor" in df_precos_visivel.columns:
             df_precos_visivel["Valor"] = df_precos_visivel["Valor"].apply(formatar_brl)
         st.dataframe(df_precos_visivel, use_container_width=True, hide_index=True)
-        st.success("✅ Tabela de preços lida diretamente e com sucesso do seu Google Sheets!")
-        st.info("💡 **Como atualizar os valores base?** Basta abrir o seu Google Sheets integrado e alterar os valores diretamente na aba **'precos'**. O aplicativo atualizará os novos preços de sugestão de forma imediata!")
+        st.success("✅ Tabela de preços lida diretamente do seu Google Sheets!")
     else:
-        st.warning("⚠️ O sistema está operando temporariamente com os valores fixos de fallback.")
+        st.warning("⚠️ Operando temporariamente com os valores internos de fallback.")
 
 # --- 8. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
@@ -739,7 +726,7 @@ elif menu == "📁 Arquivo Morto":
         else:
             st.success("Não há nenhum aluno registrado no Arquivo Morto.")
     else:
-        st.info("Nenhuma base de dados de alunos localizada.")
+        st.info("Nenhuma base de dados de alunos localizada ou sincronizada.")
 
 # --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
@@ -813,4 +800,4 @@ elif menu == "🖨️ Imprimir Prontuário":
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Nenhuma base de alunos disponível para imagem ou recebimento.")
+        st.info("Nenhuma base de alunos disponível no momento.")
