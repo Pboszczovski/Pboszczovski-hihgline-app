@@ -580,7 +580,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -636,7 +636,6 @@ elif menu == "👤 Perfil":
                         continue
                 df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
                 
-                # --- GRÁFICO ALTERADO DE px.line PARA px.bar ---
                 fig_faturamento = px.bar(
                     df_faturamento, 
                     x="Dia do Vencimento", 
@@ -644,6 +643,113 @@ elif menu == "👤 Perfil":
                     color_discrete_sequence=["#2E5A44"]
                 )
                 fig_faturamento.update_layout(plot_bgcolor="rgba(0,0,0,0)")
-                fig_faturamento.update_xaxes(type="category") # Garante o alinhamento correto das colunas por dia
+                fig_faturamento.update_xaxes(type="category")
                 
                 st.plotly_chart(fig_faturamento, use_container_width=True)
+
+# --- 7. TELA: PREÇOS ---
+elif menu == "⚙️ Preços":
+    st.title("⚙️ Configuração de Tabela de Preços")
+    st.markdown("Valores de mensalidades padrão utilizados como sugestão no momento do cadastro:")
+    
+    if df_precos is not None and not df_precos.empty:
+        df_precos_visivel = df_precos.copy()
+        if "Valor" in df_precos_visivel.columns:
+            df_precos_visivel["Valor"] = df_precos_visivel["Valor"].apply(formatar_brl)
+        st.dataframe(df_precos_visivel, use_container_width=True, hide_index=True)
+    else:
+        st.info("Utilizando preços padrão do sistema.")
+        
+    st.info("💡 Para alterar permanentemente estes valores base, edite os dados na aba **'precos'** da sua planilha integrada.")
+
+# --- 8. TELA: ARQUIVO MORTO ---
+elif menu == "📁 Arquivo Morto":
+    st.title("📁 Arquivo Morto (Alunos Inativos)")
+    st.markdown("Lista de alunos desativados ou históricos que não possuem contrato vigente ativo:")
+    
+    if df_alunos is not None and not df_alunos.empty and "Status" in df_alunos.columns:
+        df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"]
+        if not df_inativos.empty:
+            df_inativos_visivel = df_inativos.copy()
+            if "Valor" in df_inativos_visivel.columns:
+                df_inativos_visivel["Valor"] = df_inativos_visivel["Valor"].apply(formatar_brl)
+            st.dataframe(df_inativos_visivel, use_container_width=True, hide_index=True)
+        else:
+            st.success("Não há nenhum aluno registrado no Arquivo Morto.")
+    else:
+        st.info("Nenhuma base de dados de alunos localizada.")
+
+# --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
+elif menu == "🖨️ Imprimir Prontuário":
+    st.title("🖨️ Impressão de Fichas e Anamnese")
+    st.markdown("Selecione um aluno da base de dados para gerar a visualização de prontuário clínico otimizada para impressão física ou PDF.")
+    
+    if df_alunos is not None and not df_alunos.empty and "Nome" in df_alunos.columns:
+        lista_todos = sorted(df_alunos["Nome"].dropna().unique().tolist())
+        aluno_selecionado = st.selectbox("Selecione o Aluno para Emitir:", ["-- Escolha o Aluno --"] + lista_todos)
+        
+        if aluno_selecionado != "-- Escolha o Aluno --":
+            dados_aluno = df_alunos[df_alunos["Nome"] == aluno_selecionado].iloc[0]
+            
+            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (ou Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
+            
+            # Container estruturado para impressão limpa
+            st.markdown(f"""
+            <div class="print-container" style="border: 1px solid #ccc; padding: 30px; background-color: #fff; color: #000; border-radius: 5px;">
+                <div style="text-align: center; border-bottom: 2px solid #2E5A44; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h2 style="margin: 0; color: #2E5A44;">STUDIO HIGHLINE PILATES</h2>
+                    <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">Ficha Cadastral, Anamnese e Prontuário do Aluno</p>
+                </div>
+                
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px;">
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; width: 15%;">Nome:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;" colspan="3">{dados_aluno.get('Nome', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">WhatsApp:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; width: 35%;">{dados_aluno.get('Telefone', '-')}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold; width: 15%;">CPF:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; width: 35%;">{dados_aluno.get('CPF', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Nascimento:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Nascimento', '-')}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Gênero:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Genero', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Endereço:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;" colspan="3">{dados_aluno.get('Endereco', '-')} (Bairro: {dados_aluno.get('Bairro', '-')})</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Plano:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Plano', '-')}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Horário/Dias:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Horario', '-')} - {dados_aluno.get('Dias', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Início Aulas:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Inicio_Aulas', '-')}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Status:</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">{dados_aluno.get('Status', '-')}</td>
+                    </tr>
+                </table>
+                
+                <div style="margin-top: 25px;">
+                    <h3 style="color: #2E5A44; border-bottom: 1px solid #2E5A44; padding-bottom: 5px; margin-bottom: 10px;">📋 Histórico de Queixas e Sintomas</h3>
+                    <p style="font-size: 14px; background-color: #f9f9f9; padding: 12px; border-radius: 4px; line-height: 1.5; color: #000;">{dados_aluno.get('Queixa', 'Sem queixas registradas.')}</p>
+                </div>
+                
+                <div style="margin-top: 25px;">
+                    <h3 style="color: #2E5A44; border-bottom: 1px solid #2E5A44; padding-bottom: 5px; margin-bottom: 10px;">🛠️ Diretrizes de Conduta e Restrições</h3>
+                    <p style="font-size: 14px; background-color: #f9f9f9; padding: 12px; border-radius: 4px; line-height: 1.5; color: #000;">{dados_aluno.get('Conduta', 'Nenhuma restrição ou conduta específica registrada.')}</p>
+                </div>
+                
+                <div style="margin-top: 60px; text-align: center;">
+                    <p style="font-size: 12px; color: #777;">Documento emitido via sistema de gestão Highline em {datetime.now().strftime('%d/%m/%Y às %H:%M')}</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("Nenhuma base de alunos disponível para emissão.")
