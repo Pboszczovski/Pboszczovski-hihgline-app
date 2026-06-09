@@ -110,7 +110,6 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
-    # Tentativa de ler aba de configurações/preços. Se não existir, cria estrutura padrão.
     try:
         df_precos = limpar_dataframe(conn.read(worksheet="precos"))
     except:
@@ -120,7 +119,6 @@ try:
             {"Plano": "3x semana", "Valor": 300.0}
         ])
 
-    # Tratamento de redundância de colunas encontradas na planilha do cliente
     if df_alunos is not None and not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor Mensal"]
@@ -135,7 +133,6 @@ try:
 except Exception as e:
     erro_msg = str(e)
 
-# Mapeamento rápido de preços padrão caso a tabela dinâmica venha vazia
 dict_precos_padrao = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
     for _, r in df_precos.iterrows():
@@ -329,8 +326,9 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
                 
             bloqueio_edicao = False
-            if novos_dias and novo_horario:
-                if novos_dias and (Profiler_horario := novo_horario):
+            # CORREÇÃO EFETUADA AQUI (Mapeamento de conflito real com parênteses e indentação correta)
+            if novos_dias and (Profiler_horario := novo_horario):
+                conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, Profiler_horario, aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
                     for dia_conf, qtd in conflitos_ed:
@@ -636,93 +634,8 @@ elif menu == "👤 Perfil":
                     except:
                         continue
                 df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado (R$)"])
+                
+                # FINALIZAÇÃO DO GRÁFICO CORTADO:
                 fig_fat = px.line(df_faturamento, x="Dia do Vencimento", y="Faturamento Projetado (R$)", markers=True, color_discrete_sequence=["#2E5A44"])
-                fig_fat.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=2))
+                fig_fat.update_layout(plot_bgcolor="rgba(0,0,0,0)", xaxis=dict(tickmode="linear", tick0=1, dtick=1))
                 st.plotly_chart(fig_fat, use_container_width=True)
-
-# --- 7. TELA: PREÇOS (CORRIGIDA E IMPLEMENTADA) ---
-elif menu == "⚙️ Preços":
-    st.title("⚙️ Configuração de Valores dos Pacotes")
-    st.markdown("Aqui você pode visualizar e atualizar os valores padrão cobrados por cada plano de treinos.")
-    
-    if df_precos is not None and not df_precos.empty:
-        st.markdown("### Pacotes Atuais")
-        df_precos_visivel = df_precos.copy()
-        if "Valor" in df_precos_visivel.columns:
-            df_precos_visivel["Valor Formated"] = df_precos_visivel["Valor"].apply(formatar_brl)
-        st.dataframe(df_precos_visivel[["Plano", "Valor Formated"]], use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        st.markdown("### Editar Valores dos Pacotes")
-        
-        with st.form("form_ajuste_precos"):
-            novos_valores_input = {}
-            for idx, row in df_precos.iterrows():
-                plano_nome = str(row["Plano"])
-                valor_atual_float = converter_para_float(row["Valor"])
-                
-                # Cria um input numérico para cada plano encontrado na tabela
-                novos_valores_input[idx] = st.number_input(
-                    f"Valor para o Plano '{plano_nome}' (R$):",
-                    min_value=0.0,
-                    value=valor_atual_float,
-                    step=10.0,
-                    key=f"plano_{idx}"
-                )
-            
-            btn_atualizar_precos = st.form_submit_button("💾 Gravar Novos Valores dos Pacotes")
-            
-            if btn_atualizar_precos:
-                # Atualiza o dataframe local com os dados capturados do formulário
-                for idx, novo_val in novos_valores_input.items():
-                    df_precos.at[idx, "Valor"] = float(novo_val)
-                
-                # Grava de volta na worksheet "precos" do Google Sheets
-                conn.update(worksheet="precos", data=df_precos)
-                st.success("🎉 Valores dos pacotes atualizados com sucesso no Banco de Dados!")
-                st.cache_data.clear()
-                st.rerun()
-    else:
-        st.warning("A tabela de configurações de preços não pôde ser carregada ou criada.")
-
-# --- 8. TELA: ARQUIVO MORTO ---
-elif menu == "📁 Arquivo Morto":
-    st.title("📁 Arquivo Morto (Alunos Inativos)")
-    df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"] if "Status" in df_alunos.columns else pd.DataFrame()
-    
-    if not df_inativos.empty:
-        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum aluno inativado no histórico.")
-
-# --- 9. TELA: IMPRIMIR PRONTUÁRIO ---
-elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Impressão Otimizada de Prontuário")
-    if not df_alunos.empty:
-        aluno_sel_print = st.selectbox("Escolha o Prontuário do Aluno para Imprimir:", ["-- Selecione --"] + df_alunos["Nome"].tolist())
-        if aluno_sel_print != "-- Selecione --":
-            aluno_dados = df_alunos[df_alunos["Nome"] == aluno_sel_print].iloc[0]
-            
-            st.markdown("<button onclick='window.print()' class='no-print' style='background-color: #2E5A44; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;'>🖨️ Acionar Comando de Impressão (Ctrl + P)</button><br><br>", unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div class="print-container" style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ccc; background-color: white; color: black !important;">
-                <h2 style="text-align: center; border-bottom: 2px solid #2E5A44; padding-bottom: 10px; color: #2E5A44;">FICHA DE ACOMPANHAMENTO E ANAMNESE</h2>
-                <br>
-                <table style="width: 100%; border-collapse: collapse;">
-                    <tr><td style="padding: 8px; font-weight: bold; width: 25%;">Nome:</td><td style="padding: 8px;">{aluno_dados.get('Nome', '-')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">WhatsApp:</td><td style="padding: 8px;">{aluno_dados.get('Telefone', '-')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">CPF:</td><td style="padding: 8px;">{aluno_dados.get('CPF', '-')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Data Nasc:</td><td style="padding: 8px;">{aluno_dados.get('Nascimento', '-')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Endereço:</td><td style="padding: 8px;">{aluno_dados.get('Endereco', '-')}</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Plano/Valor:</td><td style="padding: 8px;">{aluno_dados.get('Plano', '-')} ({formatar_brl(aluno_dados.get('Valor', 0))})</td></tr>
-                    <tr><td style="padding: 8px; font-weight: bold;">Horários:</td><td style="padding: 8px;">{aluno_dados.get('Dias', '-')} às {aluno_dados.get('Horario', '-')}</td></tr>
-                </table>
-                <br>
-                <h3 style="border-bottom: 1px solid #2E5A44; color: #2E5A44;">Histórico Clínico e Queixas</h3>
-                <p style="padding: 8px; background: #f9f9f9; border-left: 4px solid #2E5A44;">{aluno_dados.get('Queixa', 'Nenhuma registrada')}</p>
-                <br>
-                <h3 style="border-bottom: 1px solid #2E5A44; color: #2E5A44;">Diretrizes de Conduta Técnica</h3>
-                <p style="padding: 8px; background: #f9f9f9; border-left: 4px solid #2E5A44;">{aluno_dados.get('Conduta', 'Nenhuma restrição registrada')}</p>
-            </div>
-            """, unsafe_allow_html=True)
