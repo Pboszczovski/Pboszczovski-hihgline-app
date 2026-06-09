@@ -345,7 +345,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated com sucesso!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -362,7 +362,6 @@ elif menu == "👥 Alunos":
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    # 1. AJUSTE: Transformado em Checkboxes de Dias e Horários dentro do Form
     with st.form("form_novo_aluno_anamnese_avancada"):
         st.subheader("📌 Escolha de Dias e Horários de Treino")
         
@@ -391,7 +390,6 @@ elif menu == "📝 Cadastro":
             "18:00", "19:00", "20:00"
         ]
         
-        # Grid para renderizar os checkboxes de horário de forma limpa e compacta
         cols_horarios = st.columns(5)
         horarios_selecionados = []
         for index, hora_item in enumerate(lista_horarios_disponiveis):
@@ -400,7 +398,6 @@ elif menu == "📝 Cadastro":
                     horarios_selecionados.append(hora_item)
         horario_c = ", ".join(horarios_selecionados)
 
-        # Validação dinâmica integrada interna ao clique
         bloqueio_cadastro = False
         if dias_c and horarios_selecionados:
             conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
@@ -633,7 +630,6 @@ elif menu == "👤 Perfil":
                     df_faixas = pd.cut(pd.DataFrame({"Idade": idades})["Idade"], bins=[0, 25, 35, 45, 55, 65, 120], labels=["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]).value_counts().reset_index()
                     st.plotly_chart(px.bar(df_faixas, x="Idade", y="count", text="count", color_discrete_sequence=["#2E5A44"]).update_layout(plot_bgcolor="rgba(0,0,0,0)"), use_container_width=True)
         with g_col4:
-            # 2. AJUSTE: Gráfico de previsão de faturamento por vencimento alterado
             st.markdown("### Previsão de Faturamento (Alunos p/ Dia e R$ Esperados)")
             if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
                 faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
@@ -649,17 +645,14 @@ elif menu == "👤 Perfil":
                     except:
                         continue
                 
-                # Criando DataFrame combinado
                 df_fat_ajustado = pd.DataFrame({
                     "Dia do Vencimento": list(range(1, 32)),
                     "Quantidade de Alunos": [alunos_por_dia[d] for d in range(1, 32)],
                     "Faturamento Total": [faturamento_por_dia[d] for d in range(1, 32)]
                 })
                 
-                # Formatando os valores monetários em string para exibir em cima das barras
                 df_fat_ajustado["Texto_Valor"] = df_fat_ajustado["Faturamento Total"].apply(lambda x: formatar_brl(x) if x > 0 else "")
                 
-                # Eixo X: Dias, Eixo Y: Quantidade de Alunos, Rótulo das Barras: Valor Total Esperado
                 fig_faturamento = px.bar(
                     df_fat_ajustado, 
                     x="Dia do Vencimento", 
@@ -670,9 +663,16 @@ elif menu == "👤 Perfil":
                 fig_faturamento.update_layout(
                     plot_bgcolor="rgba(0,0,0,0)",
                     yaxis_title="Quantidade de Alunos (Pagantes)",
-                    xaxis_title="Dia do Vencimento"
+                    xaxis_title="Dia do Vencimento",
+                    margin=dict(t=50, b=50) # Espaço adicional para os textos verticais não cortarem
                 )
-                fig_faturamento.update_traces(textposition='outside', textfont_size=11)
+                
+                # ALTERAÇÃO SOLICITADA: Texto na vertical (angle=-90), tamanho 14 e negrito para fácil leitura
+                fig_faturamento.update_traces(
+                    textposition='outside', 
+                    textangle=-90, 
+                    textfont=dict(size=14, family="Arial", color="black", weight="bold")
+                )
                 fig_faturamento.update_xaxes(type="category")
                 
                 st.plotly_chart(fig_faturamento, use_container_width=True)
