@@ -198,7 +198,7 @@ with st.sidebar:
             st.markdown("## 🏋️‍♂️ Studio Highline")
     st.markdown('</div>', unsafe_allow_html=True)
         
-    st.markdown("🔒 **Menu de Navegação**")
+   st.markdown("🔒 **Menu de Navegação**")
     
     menu = st.radio(
         "",
@@ -206,6 +206,7 @@ with st.sidebar:
             "📅 Agenda",
             "👥 Alunos",
             "📝 Cadastro",
+            "📈 Evolução",  # <-- ADICIONE ESTA LINHA AQUI
             "⏳ Espera",
             "💰 Financeiro",
             "👤 Perfil",
