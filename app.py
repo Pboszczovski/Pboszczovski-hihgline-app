@@ -330,7 +330,7 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             if novos_dias and novo_horario:
-                conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
+                if novos_dias and (Profiler_horario := novo_horario):
                 if conflitos_ed:
                     bloqueio_edicao = True
                     for dia_conf, qtd in conflitos_ed:
