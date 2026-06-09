@@ -362,7 +362,41 @@ elif menu == "👥 Alunos":
                     st.rerun()
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento no momento.")
+# --- NOVA TELA: EVOLUÇÃO ---
+elif menu == "📈 Evolução":
+    st.title("📈 Evolução Clínica dos Alunos")
+    
+    # Carregar dados de evolução (precisa criar essa aba no seu Sheets)
+    df_evolucoes = limpar_dataframe(conn.read(worksheet="evolucao", ttl=10))
+    
+    with st.form("form_nova_evolucao"):
+        nome_aluno_evol = st.selectbox("Selecione o Aluno:", sorted(df_alunos["Nome"].unique()))
+        texto_evol = st.text_area("Registro de Evolução/Conduta do dia:")
+        data_registro = st.date_input("Data do Registro:", datetime.now())
+        
+        if st.form_submit_button("Salvar Evolução"):
+            nova_evol = {
+                "Data": data_registro.strftime("%d/%m/%Y"),
+                "Nome do Aluno": nome_aluno_evol,
+                "Evolução": texto_evol
+            }
+            df_nova_linha = pd.DataFrame([nova_evol])
+            df_atualizado = pd.concat([df_evolucoes, df_nova_linha], ignore_index=True)
+            conn.update(worksheet="evolucao", data=df_atualizado)
+            st.success("Evolução registrada!")
+            st.rerun()
 
+    st.markdown("---")
+    # Filtro para ver histórico de um aluno específico
+    aluno_filtro = st.selectbox("Ver histórico do aluno:", ["Todos"] + sorted(df_alunos["Nome"].unique()))
+    
+    if not df_evolucoes.empty:
+        if aluno_filtro != "Todos":
+            df_exibicao = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
+        else:
+            df_exibicao = df_evolucoes
+            
+        st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True)
 # --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
