@@ -321,7 +321,7 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
-            # --- LINHA CORRIGIDA AQUI (Remoção do 'width' fantasma) ---
+            # --- CORREÇÃO DA LINHA 324 AQUI (Remoção do 'width' fantasma) ---
             if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
@@ -346,7 +346,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated com sucesso!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -577,6 +577,7 @@ elif menu == "💰 Financeiro":
         st.markdown(f'<div style="background-color: #f8f9fa; padding: 22px; border-radius: 8px; border-left: 6px solid #c62828;"><p style="margin: 0; font-size: 15px; color: #555; font-weight: bold;">Total Pendente</p><h2 style="margin: 5px 0 0 0; color: #c62828; font-size: 32px;">{formatar_brl(total_pendente)}</h2></div>', unsafe_allow_html=True)
         
     st.write("") 
+    # --- FORMATAÇÃO CORRIGIDA AQUI (Removido o <br>### bruto) ---
     st.markdown("### 📥 Dar Baixa em Pagamentos (Busca Universal)")
     
     if df_alunos is not None and not df_alunos.empty:
@@ -606,6 +607,7 @@ elif menu == "💰 Financeiro":
                 st.rerun()
 
     st.write("")
+    # --- FORMATAÇÃO CORRIGIDA AQUI ---
     st.markdown("### 📋 Histórico Geral de Transações")
     
     if df_financeiro is not None and not df_financeiro.empty:
@@ -733,7 +735,7 @@ elif menu == "🖨️ Imprimir Prontuário":
         if aluno_selecionado != "-- Escolha o Aluno --":
             dados_aluno = df_alunos[df_alunos["Nome"] == aluno_selecionado].iloc[0]
             
-            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (ou Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
+            st.markdown('<div class="no-print">💡 Use o atalho <b>Ctrl + P</b> (or Cmd + P) no navegador para imprimir. O menu lateral verde será ocultado automaticamente na folha.</div><br>', unsafe_allow_html=True)
             
             st.markdown(f"""
             <div class="print-container" style="border: 1px solid #ccc; padding: 30px; background-color: #fff; color: #000; border-radius: 5px;">
