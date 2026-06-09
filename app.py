@@ -321,7 +321,7 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
-            if novos_dias and novo_horario:
+            if novos_dias and width and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -345,7 +345,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha updated com sucesso!")
+                st.success("🎉 Planilha atualizada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -358,11 +358,14 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: CADASTRO (ESTRUTURA REATIVADA FORA DO FORM) ---
+# --- 3. TELA: CADASTRO (BLINDADA CONTRA CLIQUE DUPLO) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    # MELHORIA CRÍTICA: Dias, Horários e Plano agora rodam FORA do formulário para garantir reatividade imediata do preço e validação
+    # Inicializa o estado de "processando cadastro" para evitar cliques duplos
+    if "processando_cadastro" not in st.session_state:
+        st.session_state["processando_cadastro"] = False
+        
     st.subheader("📌 Escolha de Dias e Horários de Treino")
     
     st.markdown("**Selecione os Dias Semanais:**")
@@ -410,11 +413,9 @@ elif menu == "📝 Cadastro":
     with col_p1:
         plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
     with col_p2:
-        # Reatividade pura: ao alterar o selectbox acima, o valor padrão atualiza na hora na tela!
         valor_padrao = dict_precos_padrao.get(plano_c, 220.0)
         valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
 
-    # O formulário agora guarda apenas os campos de texto estáticos e o gatilho de gravação
     with st.form("form_dados_anamnese_limpo"):
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
@@ -467,9 +468,11 @@ elif menu == "📝 Cadastro":
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
-        # Validação do botão inteligente
+        # Trava inteligente: Se já estiver processando, desabilita o botão visualmente
         if bloqueio_cadastro:
             st.form_submit_button("Cadastro Bloqueado (Lotação Máxima Detectada)", disabled=True)
+        elif st.session_state["processando_cadastro"]:
+            st.form_submit_button("Guardando dados... Aguarde.", disabled=True)
         else:
             if st.form_submit_button("💾 Salvar Novo Aluno"):
                 if not dias_c or not horario_c:
@@ -477,6 +480,9 @@ elif menu == "📝 Cadastro":
                 elif not nome_c or not tel_c:
                     st.error("❌ Por favor, preencha o Nome Completo e o WhatsApp do aluno!")
                 else:
+                    # ATIVA TRAVA CONTRA DUPLO CLIQUE INVIABILIZANDO O SEGUNDO DISPARO
+                    st.session_state["processando_cadastro"] = True
+                    
                     checkpoint_queixas = []
                     if q_lombar: checkpoint_queixas.append("Dor Lombar")
                     if q_cervical: checkpoint_queixas.append("Dor Cervical")
@@ -519,6 +525,9 @@ elif menu == "📝 Cadastro":
 
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     st.success(f"🎉 {nome_c} cadastrado com sucesso!")
+                    
+                    # Desativa a trava ao concluir e recarrega
+                    st.session_state["processando_cadastro"] = False
                     st.cache_data.clear()
                     st.rerun()
 
