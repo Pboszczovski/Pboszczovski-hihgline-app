@@ -110,14 +110,21 @@ try:
     df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
     df_espera = limpar_dataframe(conn.read(worksheet="espera"))
     
+    # GESTÃO INTELIGENTE DE PREÇOS: Tenta ler; se não existir, cria a aba no Sheets
     try:
         df_precos = limpar_dataframe(conn.read(worksheet="precos"))
-    except:
+    except Exception:
+        # Se a aba não existir, criamos o esqueleto padrão e enviamos para o Sheets
         df_precos = pd.DataFrame([
             {"Plano": "1x semana", "Valor": 180.0},
             {"Plano": "2x semana", "Valor": 220.0},
             {"Plano": "3x semana", "Valor": 300.0}
         ])
+        try:
+            conn.update(worksheet="precos", data=df_precos)
+            st.toast("⚙️ Aba 'precos' criada automaticamente no seu Google Sheets!")
+        except:
+            pass # Previne travamentos caso as permissões de escrita falhem temporariamente
 
     if df_alunos is not None and not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
@@ -133,10 +140,13 @@ try:
 except Exception as e:
     erro_msg = str(e)
 
-dict_precos_padrao = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
+# Monta o dicionário dinâmico baseado no que está na planilha
+dict_precos_padrao = {}
 if df_precos is not None and not df_precos.empty and "Plano" in df_precos.columns:
     for _, r in df_precos.iterrows():
         dict_precos_padrao[str(r["Plano"])] = converter_para_float(r["Valor"])
+else:
+    dict_precos_padrao = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
 
 # ==========================================
 # FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
@@ -352,7 +362,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated successfully!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -580,7 +590,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
@@ -650,17 +660,17 @@ elif menu == "👤 Perfil":
 # --- 7. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Configuração de Tabela de Preços")
-    st.markdown("Valores de mensalidades padrão utilizados como sugestão no momento do cadastro:")
+    st.markdown("Estes são os valores de mensalidade utilizados como base de sugestão no momento de novos cadastros:")
     
     if df_precos is not None and not df_precos.empty:
         df_precos_visivel = df_precos.copy()
         if "Valor" in df_precos_visivel.columns:
             df_precos_visivel["Valor"] = df_precos_visivel["Valor"].apply(formatar_brl)
         st.dataframe(df_precos_visivel, use_container_width=True, hide_index=True)
+        st.success("✅ Tabela de preços lida diretamente e com sucesso do seu Google Sheets!")
+        st.info("💡 **Como atualizar os valores base?** Basta abrir o seu Google Sheets integrado e alterar os valores diretamente na aba **'precos'**. O aplicativo atualizará os novos preços de sugestão de forma imediata!")
     else:
-        st.info("Utilizando preços padrão do sistema.")
-        
-    st.info("💡 Para alterar permanentemente estes valores base, edite os dados na aba **'precos'** da sua planilha integrada.")
+        st.warning("⚠️ O sistema está operando temporariamente com os valores fixos de fallback.")
 
 # --- 8. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
@@ -752,4 +762,4 @@ elif menu == "🖨️ Imprimir Prontuário":
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("Nenhuma base de alunos disponível para emissão.")
+        st.info("Nenhuma base de alunos disponível para imagem ou emissão.")
