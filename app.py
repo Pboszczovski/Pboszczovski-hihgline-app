@@ -321,7 +321,8 @@ elif menu == "👥 Alunos":
                 
             bloqueio_edicao = False
             
-            if novos_dias and width and novo_horario:
+            # --- LINHA CORRIGIDA AQUI (Remoção do 'width' fantasma) ---
+            if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -345,7 +346,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Planilha atualizada com sucesso!")
+                st.success("🎉 Planilha updated com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
                 
@@ -358,11 +359,10 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento.")
 
-# --- 3. TELA: CADASTRO (BLINDADA CONTRA CLIQUE DUPLO) ---
+# --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    # Inicializa o estado de "processando cadastro" para evitar cliques duplos
     if "processando_cadastro" not in st.session_state:
         st.session_state["processando_cadastro"] = False
         
@@ -461,14 +461,13 @@ elif menu == "📝 Cadastro":
             t_impacto = st.checkbox("Evitar Impacto / Saltos")
             t_flexao = st.checkbox("Restrição de Flexão de Tronco")
         with col_t3:
-            t_extensao = st.checkbox("Restrição de Extensão de Tronco")
+            t_flexao_ext = st.checkbox("Restrição de Extensão de Tronco")
             t_carga = st.checkbox("Progressão de Carga Controlada")
             t_postural = st.checkbox("Reeducação Postural / Alinhamento")
             
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
         progresso_c = st.text_area("Evolução Inicial do Aluno:")
 
-        # Trava inteligente: Se já estiver processando, desabilita o botão visualmente
         if bloqueio_cadastro:
             st.form_submit_button("Cadastro Bloqueado (Lotação Máxima Detectada)", disabled=True)
         elif st.session_state["processando_cadastro"]:
@@ -480,7 +479,6 @@ elif menu == "📝 Cadastro":
                 elif not nome_c or not tel_c:
                     st.error("❌ Por favor, preencha o Nome Completo e o WhatsApp do aluno!")
                 else:
-                    # ATIVA TRAVA CONTRA DUPLO CLIQUE INVIABILIZANDO O SEGUNDO DISPARO
                     st.session_state["processando_cadastro"] = True
                     
                     checkpoint_queixas = []
@@ -501,7 +499,7 @@ elif menu == "📝 Cadastro":
                     if t_tracao: checkpoint_condutas.append("Descompressão Axial")
                     if t_impacto: checkpoint_condutas.append("Evitar Impacto")
                     if t_flexao: checkpoint_condutas.append("Restrição Flexão")
-                    if t_extensao: checkpoint_condutas.append("Restrição Extensão")
+                    if t_flexao_ext: checkpoint_condutas.append("Restrição Extensão")
                     if t_carga: checkpoint_condutas.append("Carga Controlada")
                     if t_postural: checkpoint_condutas.append("Reeducação Postural")
                     if conduta_extra: checkpoint_condutas.append(conduta_extra)
@@ -526,7 +524,6 @@ elif menu == "📝 Cadastro":
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
                     st.success(f"🎉 {nome_c} cadastrado com sucesso!")
                     
-                    # Desativa a trava ao concluir e recarrega
                     st.session_state["processando_cadastro"] = False
                     st.cache_data.clear()
                     st.rerun()
@@ -600,7 +597,7 @@ elif menu == "💰 Financeiro":
                 
             if st.button("Confirmar Baixa e Registrar", type="primary"):
                 data_registro = datetime.now().strftime("%d/%m/%Y")
-                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": categoria_pagto, "Status": "Pago"}
+                nova_linha_financeiro = {"Aluno": nome_filtrado, "Valor": float(valor_entrada), "Data": data_registro, "Forma": forma_pagto, "Categoria": category_pagto, "Status": "Pago"}
                 if "Valor_Num" in df_financeiro.columns: df_financeiro.drop(columns=["Valor_Num"], inplace=True)
                 df_financeiro_atualizado = pd.concat([df_financeiro, pd.DataFrame([nova_linha_financeiro])], ignore_index=True)
                 conn.update(worksheet="financeiro", data=df_financeiro_atualizado)
