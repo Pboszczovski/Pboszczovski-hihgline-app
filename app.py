@@ -55,7 +55,8 @@ def limpiar_dataframe(df):
         return pd.DataFrame()
     df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
     df.columns = df.columns.str.strip()
-    df.dropna(how="all", inplace=True)
+    # CORREÇÃO: Removido inplace=True para não corromper o cache do Streamlit
+    df = df.dropna(how="all")
     return df
 
 def formatar_brl(valor):
@@ -112,11 +113,11 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=10))
-    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=10))
-    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=10))
-    df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=10))
-    df_evolucoes = limpar_dataframe(conn.read(worksheet="evolucao", ttl=10))
+    df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=10))
+    df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro", ttl=10))
+    df_espera = limpiar_dataframe(conn.read(worksheet="espera", ttl=10))
+    df_precos = limpiar_dataframe(conn.read(worksheet="precos", ttl=10))
+    df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao", ttl=10))
 
     if not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
@@ -346,9 +347,8 @@ elif menu == "👥 Alunos":
                     df_alunos.at[idx_inteiro, "Horario"] = novo_horario
                     
                     conn.update(worksheet="alunos", data=df_alunos)
-                    st.success("🎉 Planilha updated com sucesso!")
+                    st.success("🎉 Alterações salvas com sucesso! Altere a aba no menu lateral para atualizar a visualização.")
                     st.cache_data.clear()
-                    st.rerun()
                     
                 if btn_inativar_alt:
                     idx_inteiro = int(idx_real_planilha)
@@ -356,9 +356,8 @@ elif menu == "👥 Alunos":
                     df_alunos = df_alunos.dropna(subset=["Nome"])
                     
                     conn.update(worksheet="alunos", data=df_alunos)
-                    st.success("❌ Aluno arquivado com sucesso!")
+                    st.success("❌ Aluno arquivado com sucesso! Altere a aba no menu lateral para atualizar a visualização.")
                     st.cache_data.clear()
-                    st.rerun()
     else:
         st.info("Nenhum aluno ativo disponível para gerenciamento no momento.")
 
@@ -528,13 +527,12 @@ elif menu == "📝 Cadastro":
                         df_alunos_atualizado = df_novo
 
                     conn.update(worksheet="alunos", data=df_alunos_atualizado)
-                    st.success(f"🎉 {nome_c} cadastrado com sucesso!")
+                    st.success(f"🎉 {nome_c} cadastrado com sucesso! Altere a aba no menu lateral para atualizar a lista.")
                     
                     st.session_state["processando_cadastro"] = False
                     st.cache_data.clear()
-                    st.rerun()
 
-# --- 4. TELA: EVOLUÇÃO (NOVA TELA INTEGRADA) ---
+# --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
     st.title("📈 Evolução Clínica dos Alunos")
     
@@ -555,9 +553,8 @@ elif menu == "📈 Evolução":
                 df_nova_linha = pd.DataFrame([nova_evol])
                 df_atualizado = pd.concat([df_evolucoes, df_nova_linha], ignore_index=True)
                 conn.update(worksheet="evolucao", data=df_atualizado)
-                st.success("🎉 Evolução registrada com sucesso!")
+                st.success("🎉 Evolução registrada com sucesso! Navegue pelo menu lateral para atualizar as tabelas.")
                 st.cache_data.clear()
-                st.rerun()
 
     st.markdown("---")
     aluno_filtro = st.selectbox("Ver histórico do aluno:", ["Todos"] + (sorted(df_alunos["Nome"].unique()).tolist() if not df_alunos.empty else []))
@@ -597,9 +594,8 @@ elif menu == "⏳ Espera":
                     df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
                 
                 conn.update(worksheet="espera", data=df_espera_atualizado)
-                st.success(f"✅ {nome_esp} adicionado com sucesso!")
+                st.success(f"✅ {nome_esp} adicionado com sucesso! Altere a aba no menu para atualizar a visualização.")
                 st.cache_data.clear()
-                st.rerun()
 
 # --- 6. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
@@ -653,9 +649,8 @@ elif menu == "💰 Financeiro":
                 df_fin_atualizado = pd.concat([df_financeiro, df_novo_fin], ignore_index=True) if not df_financeiro.empty else df_novo_fin
                 
                 conn.update(worksheet="financeiro", data=df_fin_atualizado)
-                st.success(f"✅ Pagamento de {nome_filtrado} registrado!")
+                st.success(f"✅ Pagamento de {nome_filtrado} registrado! Altere de aba para recarregar o histórico.")
                 st.cache_data.clear()
-                st.rerun()
                 
     st.markdown("---")
     st.markdown("### 📊 Histórico de Fluxo de Caixa")
@@ -708,10 +703,8 @@ elif menu == "🖨️ Imprimir Prontuário":
         if aluno_p:
             dados = df_alunos[df_alunos["Nome"] == aluno_p].iloc[0]
             
-            # Filtra evoluções deste aluno específico para exibir dinamicamente no prontuário
             evolucoes_aluno = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_p] if not df_evolucoes.empty else pd.DataFrame()
             
-            # Formatação das anotações em HTML para visualização limpa
             html_evolucoes = ""
             if not evolucoes_aluno.empty:
                 for _, r in evolucoes_aluno.sort_index(ascending=False).iterrows():
