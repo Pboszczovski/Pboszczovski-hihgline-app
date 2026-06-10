@@ -252,6 +252,19 @@ with st.sidebar:
     else:
         st.error("● Banco de Dados Offline")
 
+# Mapeamento padrão de queixas detalhadas para evitar duplicidade de strings
+LISTA_QUEIXAS_PADRAO = [
+    "Dor Lombar (Lombalgia)",
+    "Hérnia de Disco / Protrusão",
+    "Dor / Lesão nos Ombros",
+    "Dor Cervical (Cervicalgia)",
+    "Dor / Lesão nos Joelhos",
+    "Melhoria Postural Operacional",
+    "Pilates para Gestantes",
+    "Pilates para Terceira Idade (Idosos)",
+    "Condicionamento Físico Geral"
+]
+
 # --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos")
@@ -351,35 +364,58 @@ elif menu == "👥 Alunos":
                 btn_salvar_alt = st.button("💾 Gravar Alterações", disabled=bloqueio_edicao)
                 btn_inativar_alt = st.button("❌ Mover ao Arquivo Morto")
             
-            # --- NOVA FUNCIONALIDADE ADICIONADA: Edição de Queixas/Tratamentos Clínicos ---
-            st.markdown("#### 🩺 Atualizar Anamnese: Objetivos e Tratamentos")
+            # --- SEÇÃO ATUALIZADA: Checkboxes de Queixas Clínicas Idênticos ao Cadastro ---
+            st.markdown("#### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
             queixa_atual_str = str(dados_atuais.get("Queixa", ""))
             
             c_ch1, c_ch2, c_ch3 = st.columns(3)
             with c_ch1:
-                ed_t_reab = st.checkbox("Pilates Clínico / Reabilitação", value=("Reabilitação" in queixa_atual_str))
-                ed_t_coluna = st.checkbox("Patologias da Coluna (Hérnias/Escoliose)", value=("Patologias Coluna" in queixa_atual_str))
+                ed_q_lombar = st.checkbox("Dor Lombar (Lombalgia)", value=("Dor Lombar (Lombalgia)" in queixa_atual_str))
+                ed_q_cervical = st.checkbox("Dor Cervical (Cervicalgia)", value=("Dor Cervical (Cervicalgia)" in queixa_atual_str))
+                ed_q_gestante = st.checkbox("Pilates para Gestantes", value=("Pilates para Gestantes" in queixa_atual_str))
             with c_ch2:
-                ed_t_cond = st.checkbox("Condicionamento Físico Geral", value=("Condicionamento" in queixa_atual_str))
-                ed_t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", value=("Idosos" in queixa_atual_str))
+                ed_q_hernia = st.checkbox("Hérnia de Disco / Protrusão", value=("Hérnia de Disco / Protrusão" in queixa_atual_str))
+                ed_q_joelhos = st.checkbox("Dor / Lesão nos Joelhos", value=("Dor / Lesão nos Joelhos" in queixa_atual_str))
+                ed_q_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", value=("Pilates para Terceira Idade (Idosos)" in queixa_atual_str))
             with c_ch3:
-                ed_t_gest = st.checkbox("Pilates para Gestantes", value=("Gestantes" in queixa_atual_str))
-                ed_t_postura = st.checkbox("Melhoria Postural Operacional / Dores", value=("Postural" in queixa_atual_str))
+                ed_q_ombros = st.checkbox("Dor / Lesão nos Ombros", value=("Dor / Lesão nos Ombros" in queixa_atual_str))
+                ed_q_postural = st.checkbox("Melhoria Postural Operacional", value=("Melhoria Postural Operacional" in queixa_atual_str))
+                ed_q_condic = st.checkbox("Condicionamento Físico Geral", value=("Condicionamento Físico Geral" in queixa_atual_str))
             
-            # Captura termos extras que não batem com as palavras-chave mapeadas acima
+            # Isolar termos extras manuais que não batem com os nomes padrões acima
             termos_limpos = []
             for t in queixa_atual_str.split(" | "):
                 t_strip = t.strip()
-                if t_strip and t_strip not in ["Reabilitação", "Patologias Coluna", "Condicionamento", "Idosos", "Gestantes", "Postural"]:
+                if t_strip and t_strip not in LISTA_QUEIXAS_PADRAO and t_strip.upper() != "NAN":
                     termos_limpos.append(t_strip)
             queixas_adicionais_existentes = " | ".join(termos_limpos)
             
-            ed_queixa_extra = st.text_input("Outras Patologias / Observações Clínicas Adicionais:", value=queixas_adicionais_existentes)
-            ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=str(dados_atuais.get("Conduta", "")))
+            ed_queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:", value=queixas_adicionais_existentes)
+            
+            conduta_atual = str(dados_atuais.get("Conduta", ""))
+            if conduta_atual.lower() == "nan":
+                conduta_atual = ""
+            ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=conduta_atual)
             
             if btn_salvar_alt and not bloqueio_edicao:
-                # Processar novos itens selecionados
-                novos_tratamentos = [t for t, m in [("Reabilitação", ed_t_reab), ("Patologias Coluna", ed_t_coluna), ("Condicionamento", ed_t_cond), ("Idosos", ed_t_idoso), ("Gestantes", ed_t_gest), ("Postural", ed_t_postura)] if m]
+                # Montar lista com as caixas que foram marcadas
+                novos_tratamentos = []
+                mapeamento_check = [
+                    ("Dor Lombar (Lombalgia)", ed_q_lombar),
+                    ("Hérnia de Disco / Protrusão", ed_q_hernia),
+                    ("Dor / Lesão nos Ombros", ed_q_ombros),
+                    ("Dor Cervical (Cervicalgia)", ed_q_cervical),
+                    ("Dor / Lesão nos Joelhos", ed_q_joelhos),
+                    ("Melhoria Postural Operacional", ed_q_postural),
+                    ("Pilates para Gestantes", ed_q_gestante),
+                    ("Pilates para Terceira Idade (Idosos)", ed_q_idoso),
+                    ("Condicionamento Físico Geral", ed_q_condic)
+                ]
+                
+                for nome_queixa, marcado in mapeamento_check:
+                    if marcado:
+                        novos_tratamentos.append(nome_queixa)
+                        
                 if ed_queixa_extra.strip(): 
                     novos_tratamentos.append(ed_queixa_extra.strip())
                 
@@ -387,8 +423,8 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Valor"] = float(novo_valor)  
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
-                df_alunos.at[idx_real_planilha, "Queixa"] = " | ".join(novos_tratamentos)
-                df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra
+                df_alunos.at[idx_real_planilha, "Queixa"] = " | ".join(novos_tratamentos) if novos_tratamentos else ""
+                df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra.strip()
                 
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("🎉 Alterações cadastrais e clínicas salvas com sucesso!")
@@ -452,19 +488,22 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        st.subheader("2. Anamnese: Objetivos e Tratamentos de Pilates")
+        st.subheader("2. Anamnese: Queixas Principais e Sintomas")
         c_t1, c_t2, c_t3 = st.columns(3)
         with c_t1:
-            t_reab = st.checkbox("Pilates Clínico / Reabilitação")
-            t_coluna = st.checkbox("Patologias da Coluna (Hérnias/Escoliose)")
+            t_lombar = st.checkbox("Dor Lombar (Lombalgia)")
+            t_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
+            t_gestante = st.checkbox("Pilates para Gestantes")
         with c_t2:
-            t_cond = st.checkbox("Condicionamento Físico Geral")
+            t_hernia = st.checkbox("Hérnia de Disco / Protrusão")
+            t_joelhos = st.checkbox("Dor / Lesão nos Joelhos")
             t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)")
         with c_t3:
-            t_gest = st.checkbox("Pilates para Gestantes")
-            t_postura = st.checkbox("Melhoria Postural Operacional / Dores")
+            t_ombros = st.checkbox("Dor / Lesão nos Ombros")
+            t_postural = st.checkbox("Melhoria Postural Operacional")
+            t_condic = st.checkbox("Condicionamento Físico Geral")
             
-        queixa_extra = st.text_input("Outras Patologias / Observações Clínicas Adicionais:")
+        queixa_extra = st.text_input("Outras Queixas Adicionais:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
@@ -484,13 +523,30 @@ elif menu == "📝 Cadastro":
                     for dia_lotado, hora_lotada, qtd in conflitos:
                         st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
                 else:
-                    tratamentos = [t for t, m in [("Reabilitação", t_reab), ("Patologias Coluna", t_coluna), ("Condicionamento", t_cond), ("Idosos", t_idoso), ("Gestantes", t_gest), ("Postural", t_postura)] if m]
-                    if queixa_extra: tratamentos.append(queixa_extra)
+                    tratamentos = []
+                    mapeamento_cadastro = [
+                        ("Dor Lombar (Lombalgia)", t_lombar),
+                        ("Hérnia de Disco / Protrusão", t_hernia),
+                        ("Dor / Lesão nos Ombros", t_ombros),
+                        ("Dor Cervical (Cervicalgia)", t_cervical),
+                        ("Dor / Lesão nos Joelhos", t_joelhos),
+                        ("Melhoria Postural Operacional", t_postural),
+                        ("Pilates para Gestantes", t_gestante),
+                        ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                        ("Condicionamento Físico Geral", t_condic)
+                    ]
+                    
+                    for nome_queixa, marcado in mapeamento_cadastro:
+                        if marcado:
+                            tratamentos.append(nome_queixa)
+                            
+                    if queixa_extra.strip(): 
+                        tratamentos.append(queixa_extra.strip())
                     
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
                         "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra, 
+                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
                         "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
                         "Endereco": f"{endereco_base} {complemento_c}".strip()
                     }
@@ -502,7 +558,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clinical dos Alunos")
+    st.title("📈 Evolução Clínica dos Alunos")
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
