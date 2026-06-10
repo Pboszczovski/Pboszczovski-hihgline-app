@@ -34,7 +34,6 @@ st.markdown("""
             align-items: center;
             padding: 10px 0px 20px 0px;
         }
-        /* Estilos específicos para a ficha de impressão */
         .prontuario-card {
             background-color: #ffffff;
             color: #000000;
@@ -67,6 +66,7 @@ st.markdown("""
         .tabela-prontuario td {
             padding: 8px;
             border: 1px solid #ddd;
+            color: #000000 !important;
         }
         @media print {
             [data-testid="stSidebar"], .stHeader, footer, .no-print, button, .stMarkdownCmds {
@@ -107,7 +107,7 @@ def formatar_brl(valor):
             val_float = float(val_limpo)
         return f"R$ {val_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
-        return str(valor)
+        return "R$ 0,00"
 
 def converter_para_float(valor):
     try:
@@ -131,7 +131,6 @@ def converter_para_float(valor):
 conexao_ok = False
 erro_msg = ""
 
-# Inicialização preventiva de tabelas estruturadas
 df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Endereco"])
 df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Forma", "Categoria", "Status"])
 df_espera = pd.DataFrame(columns=["Nome", "Telefone"])
@@ -179,9 +178,6 @@ if df_precos is not None and not df_precos.empty and "Plano" in df_precos.column
 else:
     dict_precos_padrao = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
 
-# ==========================================
-# FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
-# ==========================================
 def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None):
     if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
         return [], []
@@ -355,13 +351,13 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Alterações salvas! Mude de aba no menu lateral para atualizar.")
+                st.success("🎉 Alterações salvas!")
                 st.cache_data.clear()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("❌ Aluno arquivado! Mude de aba no menu lateral para atualizar.")
+                st.success("❌ Aluno arquivado!")
                 st.cache_data.clear()
     else:
         st.info("Nenhum aluno ativo cadastrado.")
@@ -461,12 +457,12 @@ elif menu == "📝 Cadastro":
                 
                 df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success(f"🎉 {nome_c} cadastrado! Recarregue trocando de aba.")
+                st.success(f"🎉 {nome_c} cadastrado!")
                 st.cache_data.clear()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clinical dos Alunos")
+    st.title("📈 Evolução Clínica dos Alunos")
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
@@ -517,7 +513,6 @@ elif menu == "💰 Financeiro":
     total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty else 0.0
     
     f_col1, f_col2 = st.columns(2)
-    # CORREÇÃO 1: Valores expressos com duas casas decimais nos indicadores em destaque
     with f_col1: st.metric("Total Recebido", formatar_brl(total_recebido))
     with f_col2: st.metric("Total Pendente", formatar_brl(total_pendente))
         
@@ -528,7 +523,6 @@ elif menu == "💰 Financeiro":
             sel_baixa = st.selectbox("Selecione o aluno:", opcoes_baixa)
             nome_f = sel_baixa.split(" | ")[0]
             
-            # Captura automática do valor real do aluno selecionado
             row_aluno_atual = df_alunos[df_alunos["Nome"] == nome_f].iloc[0]
             v_sugerido = converter_para_float(row_aluno_atual.get("Valor", 0.0))
             
@@ -545,7 +539,6 @@ elif menu == "💰 Financeiro":
     st.markdown("### 📊 Histórico de Transações")
     if not df_financeiro.empty:
         df_fin_exibicao = df_financeiro.copy()
-        # CORREÇÃO 1: Garante as duas casas decimais dentro de cada linha do histórico da tabela
         if "Valor" in df_fin_exibicao.columns:
             df_fin_exibicao["Valor"] = df_fin_exibicao["Valor"].apply(formatar_brl)
         st.dataframe(df_fin_exibicao, use_container_width=True, hide_index=True)
@@ -559,7 +552,6 @@ elif menu == "👤 Perfil":
     st.markdown("---")
     st.markdown("### 📊 Métricas de Ocupação do Studio")
     
-    # CORREÇÃO 2: Reconstrução completa dos gráficos que haviam sumido
     df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if not df_alunos.empty else pd.DataFrame()
     
     if not df_ativos_graficos.empty:
@@ -573,8 +565,6 @@ elif menu == "👤 Perfil":
                 fig1 = px.bar(df_contagem_plano, x="Plano", y="Quantidade", text="Quantidade", color_discrete_sequence=["#2E5A44"])
                 fig1.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
                 st.plotly_chart(fig1, use_container_width=True)
-            else:
-                st.info("Coluna 'Plano' não disponível.")
                 
         with cg2:
             st.markdown("#### Distribuição por Gênero")
@@ -584,15 +574,12 @@ elif menu == "👤 Perfil":
                 fig2 = px.pie(df_contagem_genero, names="Gênero", values="Quantidade", color_discrete_sequence=["#2E5A44", "#FFD700", "#7f7f7f"])
                 fig2.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
                 st.plotly_chart(fig2, use_container_width=True)
-            else:
-                st.info("Coluna 'Genero' não disponível.")
     else:
-        st.info("Adicione alunos ativos para renderizar a distribuição gráfica corporativa.")
+        st.info("Nenhum gráfico para exibir. Adicione alunos ativos na aba Cadastro.")
 
 # --- 8. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Tabela de Preços Base")
-    # CORREÇÃO 3: Exibição explícita com duas casas decimais na tabela técnica de preços
     df_precos_exibicao = pd.DataFrame(list(dict_precos_padrao.items()), columns=["Plano de Treinamento", "Valor Sugerido"])
     df_precos_exibicao["Valor Sugerido"] = df_precos_exibicao["Valor Sugerido"].apply(formatar_brl)
     st.dataframe(df_precos_exibicao, use_container_width=True, hide_index=True)
@@ -607,8 +594,10 @@ elif menu == "📁 Arquivo Morto":
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Ficha Cadastral e Prontuário do Aluno")
     
-    if not df_alunos.empty:
-        aluno_p = st.selectbox("Selecione o Aluno para Emitir Documentação:", sorted(list(df_alunos["Nome"].dropna().unique())))
+    # CORREÇÃO CRÍTICA: Busca direta sobre qualquer linha da planilha de alunos para evitar travamentos
+    if not df_alunos.empty and "Nome" in df_alunos.columns:
+        lista_prontuario_geral = sorted(list(df_alunos["Nome"].dropna().unique()))
+        aluno_p = st.selectbox("Selecione o Aluno para Emitir Documentação:", lista_prontuario_geral)
         
         if aluno_p:
             dados = df_alunos[df_alunos["Nome"] == aluno_p].iloc[0]
@@ -617,15 +606,14 @@ elif menu == "🖨️ Imprimir Prontuário":
             html_evolucoes = ""
             if not evolucoes_aluno.empty:
                 for _, r in evolucoes_aluno.sort_index(ascending=False).iterrows():
-                    html_evolucoes += f"<p style='margin:4px 0; border-bottom:1px dashed #eee; padding-bottom:4px;'><b>{r['Data']}:</b> {r['Evolução']}</p>"
+                    html_evolucoes += f"<p style='margin:4px 0; border-bottom:1px dashed #eee; padding-bottom:4px; color:#000000;'><b>{r['Data']}:</b> {r['Evolução']}</p>"
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
                 
-            # CORREÇÃO 4: Substituição do iframe html por um componente nativo Markdown que respeita CSS e dados do escopo
             st.markdown(f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
-                    <h2 style="margin:0; letter-spacing: 1px;">STUDIO HIGHLINE PILATES</h2>
+                    <h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
                     <span style="font-size:12px; text-transform: uppercase; color:#555;">Ficha Prontuário de Acompanhamento Técnico</span>
                 </div>
                 
@@ -652,10 +640,10 @@ elif menu == "🖨️ Imprimir Prontuário":
                 </table>
                 
                 <div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
-                <p style="margin: 10px 0; line-height: 1.5; font-size:14px;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
+                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
                 
                 <div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
-                <p style="margin: 10px 0; line-height: 1.5; font-size:14px;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
+                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
                 
                 <div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
                 <div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
@@ -667,4 +655,4 @@ elif menu == "🖨️ Imprimir Prontuário":
             st.write("")
             st.markdown("<p class='no-print' style='color:#666; font-size:13px;'>💡 <b>Suporte para Impressão limpa:</b> Pressione <b>Ctrl + P</b> (ou <b>Cmd + P</b> no Mac). A barra lateral verde e os botões serão ocultados de forma automática na folha.</p>", unsafe_allow_html=True)
     else:
-        st.info("Nenhum registro de aluno ativo disponível para montagem de prontuário.")
+        st.info("Nenhum registro de aluno cadastrado no banco de dados para montagem do prontuário.")
