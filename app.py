@@ -252,7 +252,6 @@ with st.sidebar:
     else:
         st.error("● Banco de Dados Offline")
 
-# Mapeamento padrão de queixas detalhadas para evitar duplicidade de strings
 LISTA_QUEIXAS_PADRAO = [
     "Dor Lombar (Lombalgia)",
     "Hérnia de Disco / Protrusão",
@@ -364,7 +363,6 @@ elif menu == "👥 Alunos":
                 btn_salvar_alt = st.button("💾 Gravar Alterações", disabled=bloqueio_edicao)
                 btn_inativar_alt = st.button("❌ Mover ao Arquivo Morto")
             
-            # --- SEÇÃO ATUALIZADA: Checkboxes de Queixas Clínicas Idênticos ao Cadastro ---
             st.markdown("#### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
             queixa_atual_str = str(dados_atuais.get("Queixa", ""))
             
@@ -382,7 +380,6 @@ elif menu == "👥 Alunos":
                 ed_q_postural = st.checkbox("Melhoria Postural Operacional", value=("Melhoria Postural Operacional" in queixa_atual_str))
                 ed_q_condic = st.checkbox("Condicionamento Físico Geral", value=("Condicionamento Físico Geral" in queixa_atual_str))
             
-            # Isolar termos extras manuais que não batem com os nomes padrões acima
             termos_limpos = []
             for t in queixa_atual_str.split(" | "):
                 t_strip = t.strip()
@@ -398,7 +395,6 @@ elif menu == "👥 Alunos":
             ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=conduta_atual)
             
             if btn_salvar_alt and not bloqueio_edicao:
-                # Montar lista com as caixas que foram marcadas
                 novos_tratamentos = []
                 mapeamento_check = [
                     ("Dor Lombar (Lombalgia)", ed_q_lombar),
@@ -604,7 +600,7 @@ elif menu == "⏳ Espera":
             st.success("✅ Adicionado!")
             st.cache_data.clear()
 
-# --- 6. TELA: FINANCEIRO ---
+# --- 6. TELA: FINANCEIRO (ATUALIZADA) ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro")
     total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty else 0.0
@@ -628,10 +624,19 @@ elif menu == "💰 Financeiro":
             
             if st.button("Confirmar Pagamento"):
                 nova_baixa = {"Aluno": nome_f, "Valor": float(val_baixa_input), "Data": datetime.now().strftime("%d/%m/%Y"), "Forma": "PIX", "Categoria": "Mensalidade", "Status": "PAGO"}
-                df_financeiro = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
-                conn.update(worksheet="financeiro", data=df_financeiro)
-                st.success("✅ Pagamento gravado com sucesso!")
-                st.cache_data.clear()
+                df_financeiro_novo = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
+                
+                # Try/Except estruturado para capturar erros de gravação na API sem quebrar a tela
+                try:
+                    conn.update(worksheet="financeiro", data=df_financeiro_novo)
+                    st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso no Google Sheets!")
+                    df_financeiro = df_financeiro_novo
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as api_err:
+                    st.error("🛑 Erro de Gravação na Planilha!")
+                    st.warning("Verifique se a aba na sua planilha do Google Sheets se chama exatamente **financeiro** (tudo minúsculo) e se a conta do sistema possui permissão de Editor.")
+                    st.info(f"Detalhe técnico do erro: {api_err}")
                 
     st.markdown("---")
     st.markdown("### 📊 Histórico de Transações")
