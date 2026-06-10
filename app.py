@@ -35,7 +35,7 @@ st.markdown("""
             padding: 10px 0px 20px 0px;
         }
         .prontuario-card {
-            background-color: #ffffff;
+            background-color: #ffffff !important;
             color: #000000 !important;
             padding: 25px;
             border: 2px solid #2E5A44;
@@ -48,14 +48,14 @@ st.markdown("""
             text-align: center;
             border-bottom: 3px solid #2E5A44;
             padding-bottom: 10px;
-            color: #2E5A44;
+            color: #2E5A44 !important;
             margin-bottom: 20px;
         }
         .prontuario-secao {
             border-bottom: 1px solid #ccc;
             margin-top: 20px;
             padding-bottom: 5px;
-            color: #2E5A44;
+            color: #2E5A44 !important;
             font-weight: bold;
         }
         .tabela-prontuario {
@@ -193,7 +193,6 @@ def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None)
         return [], []
         
     conflitos = []
-    alunos_no_horario = []
     
     for h_alvo in horarios_solicitados:
         for dia in dias_solicitados:
@@ -204,12 +203,10 @@ def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None)
                     d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
                     if dia in d_atual:
                         qtd_no_bloco += 1
-                        if f"{row['Nome']} ({row['Dias']} às {row['Horario']})" not in alunos_no_horario:
-                            alunos_no_horario.append(f"{row['Nome']} ({row['Dias']} às {row['Horario']})")
             if qtd_no_bloco >= 3:
                 conflitos.append((dia, h_alvo, qtd_no_bloco))
                 
-    return conflitos, alunos_no_horario
+    return conflitos, []
 
 # ==========================================
 # 3. BARRA LATERAL - LOGO E MENU
@@ -366,43 +363,33 @@ elif menu == "👥 Alunos":
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    st.subheader("📌 Escolha de Dias e Horários de Treino")
-    c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
-    with c_dia1: d_seg = st.checkbox("SEG")
-    with c_dia2: d_ter = st.checkbox("TER")
-    with c_dia3: d_qua = st.checkbox("QUA")
-    with c_dia4: d_qui = st.checkbox("QUI")
-    with c_dia5: d_sex = st.checkbox("SEX")
-    with c_dia6: d_sab = st.checkbox("SAB")
-    
-    dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
-    dias_c = "/".join(dias_lista)
-    
-    lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
-    cols_horarios = st.columns(6)
-    horarios_selecionados = []
-    for index, hora_item in enumerate(lista_horarios_disponiveis):
-        with cols_horarios[index % 6]:
-            if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
-                horarios_selecionados.append(hora_item)
-    horario_c = ", ".join(horarios_selecionados)
+    # UNIFICAÇÃO DOS COMPONENTES DENTRO DO FORMULÁRIO DO STREAMLIT
+    with st.form("form_dados_anamnese_completo"):
+        st.subheader("📌 Escolha de Dias e Horários de Treino")
+        c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
+        with c_dia1: d_seg = st.checkbox("SEG")
+        with c_dia2: d_ter = st.checkbox("TER")
+        with c_dia3: d_qua = st.checkbox("QUA")
+        with c_dia4: d_qui = st.checkbox("QUI")
+        with c_dia5: d_sex = st.checkbox("SEX")
+        with c_dia6: d_sab = st.checkbox("SAB")
+        
+        lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
+        st.markdown("**Horários Disponíveis (Selecione um ou mais):**")
+        cols_horarios = st.columns(6)
+        horarios_selecionados = []
+        for index, hora_item in enumerate(lista_horarios_disponiveis):
+            with cols_horarios[index % 6]:
+                if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
+                    horarios_selecionados.append(hora_item)
 
-    bloqueio_cadastro = False
-    if dias_c and horarios_selecionados and not df_alunos.empty:
-        conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
-        if conflitos:
-            bloqueio_cadastro = True
-            for dia_lotado, hora_lotada, qtd in conflitos:
-                st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
+        st.subheader("1. Dados Pessoais e de Contrato")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+        with col_p2:
+            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(dict_precos_padrao.get(plano_c, 220.0)))
 
-    st.subheader("1. Dados Pessoais e de Contrato")
-    col_p1, col_p2 = st.columns(2)
-    with col_p1:
-        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
-    with col_p2:
-        valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(dict_precos_padrao.get(plano_c, 220.0)))
-
-    with st.form("form_dados_anamnese_limpo"):
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
         with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
@@ -436,33 +423,42 @@ elif menu == "📝 Cadastro":
         queixa_extra = st.text_input("Outras Queixas Adicionais:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
-        btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno", disabled=bloqueio_cadastro)
+        btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
         if btn_enviar:
+            dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
+            dias_c = "/".join(dias_lista)
+            horario_c = ", ".join(horarios_selecionados)
+
             if not dias_c or not horario_c:
                 st.error("❌ Selecione pelo menos um Dia e Horário!")
             elif not nome_c or not tel_c:
                 st.error("❌ Preencha o Nome e o WhatsApp!")
             else:
-                queixas = [q for q, m in [("Lombar", q_lombar), ("Cervical", q_cervical), ("Hérnia", q_hernia), ("Joelho", q_joelho), ("Ombro", q_ombro), ("Postural", q_postura)] if m]
-                if queixa_extra: queixas.append(queixa_extra)
-                
-                nova_linha = {
-                    "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
-                    "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                    "Status": "Ativo", "Queixa": " | ".join(queixas), "Conduta": conduta_extra, 
-                    "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
-                    "Endereco": f"{endereco_base} {complemento_c}".strip()
-                }
-                
-                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                conn.update(worksheet="alunos", data=df_alunos)
-                st.success(f"🎉 {nome_c} cadastrado!")
-                st.cache_data.clear()
+                conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
+                if conflitos:
+                    for dia_lotado, hora_lotada, qtd in conflitos:
+                        st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
+                else:
+                    queixas = [q for q, m in [("Lombar", q_lombar), ("Cervical", q_cervical), ("Hérnia", q_hernia), ("Joelho", q_joelho), ("Ombro", q_ombro), ("Postural", q_postura)] if m]
+                    if queixa_extra: queixas.append(queixa_extra)
+                    
+                    nova_linha = {
+                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
+                        "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
+                        "Status": "Ativo", "Queixa": " | ".join(queixas), "Conduta": conduta_extra, 
+                        "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
+                        "Endereco": f"{endereco_base} {complemento_c}".strip()
+                    }
+                    
+                    df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
+                    conn.update(worksheet="alunos", data=df_alunos)
+                    st.success(f"🎉 {nome_c} cadastrado com sucesso!")
+                    st.cache_data.clear()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clinical dos Alunos")
+    st.title("📈 Evolução Clínica dos Alunos")
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
@@ -482,14 +478,17 @@ elif menu == "📈 Evolução":
                 st.cache_data.clear()
 
     st.markdown("---")
-    opcoes_filtro = ["Todos"] + lista_nomes_alunos
-    aluno_filtro = st.selectbox("Ver histórico do aluno:", opcoes_filtro)
     
-    if not df_evolucoes.empty:
-        df_exibicao = df_evolucoes if aluno_filtro == "Todos" else df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
-        st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True, hide_index=True)
-    else:
-        st.info("Nenhum registro clínico encontrado.")
+    # PROTEÇÃO CONTRA FILTROS DE ARRAYS VAZIOS
+    if not df_alunos.empty:
+        opcoes_filtro = ["Todos"] + sorted(list(df_alunos["Nome"].dropna().unique()))
+        aluno_filtro = st.selectbox("Ver histórico do aluno:", opcoes_filtro)
+        
+        if not df_evolucoes.empty:
+            df_exibicao = df_evolucoes if aluno_filtro == "Todos" else df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
+            st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum registro clínico encontrado.")
 
 # --- 5. TELA: ESPERA ---
 elif menu == "⏳ Espera":
@@ -552,12 +551,8 @@ elif menu == "👤 Perfil":
     st.markdown("---")
     st.markdown("### 📊 Métricas de Ocupação do Studio")
     
-    # AJUSTE DE SEGURANÇA: Se a base estiver instável, puxamos qualquer dado disponível para não sumir com o gráfico
     if not df_alunos.empty:
-        df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        if df_ativos_graficos.empty:
-            df_ativos_graficos = df_alunos.copy()
-            
+        df_ativos_graficos = df_alunos.copy()
         cg1, cg2 = st.columns(2)
         
         with cg1:
@@ -612,45 +607,44 @@ elif menu == "🖨️ Imprimir Prontuário":
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
             
-            # BLINDAGEM FIX: HTML limpo e concatenado sem recuos/tabs internos para impedir que o Streamlit interprete como bloco de código markdown
-            prontuario_html = f"""<div class="prontuario-card">
-<div class="prontuario-header">
-<h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
-<span style="font-size:12px; text-transform: uppercase; color:#555;">Ficha Prontuário de Acompanhamento Técnico</span>
-</div>
-<table class="tabela-prontuario">
-<tr>
-<td style="width:50%;"><b>Nome do Aluno:</b> {dados.get('Nome', '-')}</td>
-<td style="width:50%;"><b>CPF:</b> {dados.get('CPF', '-')}</td>
-</tr>
-<tr>
-<td><b>WhatsApp / Contato:</b> {dados.get('Telefone', '-')}</td>
-<td><b>Data de Nascimento:</b> {dados.get('Nascimento', '-')}</td>
-</tr>
-<tr>
-<td><b>Gênero:</b> {dados.get('Genero', '-')}</td>
-<td><b>Início das Atividades:</b> {dados.get('Inicio_Aulas', '-')}</td>
-</tr>
-<tr>
-<td><b>Plano Vinculado:</b> {dados.get('Plano', '-')}</td>
-<td><b>Grade Horária Fixa:</b> {dados.get('Dias', '-')} às {dados.get('Horario', '-')}</td>
-</tr>
-<tr>
-<td colspan="2"><b>Endereço Residencial:</b> {dados.get('Endereco', '-')} (Bairro: {dados.get('Bairro', '-')})</td>
-</tr>
-</table>
-<div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
-<p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
-<div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
-<p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
-<div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
-<div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
-{html_evolucoes}
-</div>
-</div>"""
-
-            # Força a renderização do HTML nativo
-            st.components.v1.html(prontuario_html, height=750, scrolling=True)
+            # RESOLUÇÃO DO CONTEXTO VISUAL: Renderização via Markdown Direto com Unsafe HTML (Garante estilização css no escopo raiz)
+            st.markdown(f"""
+            <div class="prontuario-card">
+                <div class="prontuario-header">
+                    <h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
+                    <span style="font-size:12px; text-transform: uppercase; color:#555;">Ficha Prontuário de Acompanhamento Técnico</span>
+                </div>
+                <table class="tabela-prontuario">
+                    <tr>
+                        <td style="width:50%;"><b>Nome do Aluno:</b> {dados.get('Nome', '-')}</td>
+                        <td style="width:50%;"><b>CPF:</b> {dados.get('CPF', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td><b>WhatsApp / Contato:</b> {dados.get('Telefone', '-')}</td>
+                        <td><b>Data de Nascimento:</b> {dados.get('Nascimento', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Gênero:</b> {dados.get('Genero', '-')}</td>
+                        <td><b>Início das Atividades:</b> {dados.get('Inicio_Aulas', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td><b>Plano Vinculado:</b> {dados.get('Plano', '-')}</td>
+                        <td><b>Grade Horária Fixa:</b> {dados.get('Dias', '-')} às {dados.get('Horario', '-')}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"><b>Endereço Residencial:</b> {dados.get('Endereco', '-')} (Bairro: {dados.get('Bairro', '-')})</td>
+                    </tr>
+                </table>
+                <div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
+                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
+                <div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
+                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
+                <div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
+                <div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
+                    {html_evolucoes}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
             st.write("")
             st.markdown("<p class='no-print' style='color:#666; font-size:13px;'>💡 <b>Suporte para Impressão limpa:</b> Pressione <b>Ctrl + P</b> (ou <b>Cmd + P</b> no Mac). A barra lateral verde e os botões serão ocultados de forma automática na folha.</p>", unsafe_allow_html=True)
