@@ -161,7 +161,6 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # TTL ajustado para 60 segundos para evitar sobrecarga de requisições e loopings de rede
     try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=60))
     except: pass
     
@@ -366,7 +365,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
             bloqueio_edicao = False
-            if novos_dias and font_size := novo_horario:
+            if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -497,14 +496,14 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
-        st.write("Marque abaixo todas as condições clínicas e objectives aplicáveis a este aluno:")
+        st.subheader("2. Anamnese: Queixas Principais e Sintomas")
+        st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
         
         t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="k_lombar")
         t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="k_cervical")
         t_gestante = st.checkbox("Pilates para Gestantes", key="k_gestante")
         t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="k_hernia")
-        t_joelhos = st.checkbox("Dor / Lesão nos Joelhes", key="k_joelhos")
+        t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="k_joelhos")
         t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="k_idoso")
         t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="k_ombros")
         t_postural = st.checkbox("Melhoria Postural Operacional", key="k_postural")
@@ -634,13 +633,21 @@ elif menu == "💰 Financeiro":
             val_baixa_input = st.number_input("Valor Recebido (R$):", value=v_sugerido, step=10.0)
             
             if st.button("Confirmar Pagamento"):
-                nova_baixa = {"Aluno": nome_f, "Valor": float(val_baixa_input), "Data": datetime.now().strftime("%d/%m/%Y"), "Forma": "PIX", "Categoria": "Mensalidade", "Status": "PAGO"}
-                df_financeiro_novo = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
+                nova_baixa = {
+                    "Aluno": nome_f, 
+                    "Valor": float(val_baixa_input), 
+                    "Data": datetime.now().strftime("%d/%m/%Y"), 
+                    "Forma": "PIX", 
+                    "Categoria": "Mensalidade", 
+                    "Status": "PAGO"
+                }
+                
+                # Alinhamento correto com as colunas da planilha do Sheets
+                df_financeiro = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
                 
                 try:
-                    conn.update(worksheet="financeiro", data=df_financeiro_novo)
+                    conn.update(worksheet="financeiro", data=df_financeiro)
                     st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso!")
-                    df_financeiro = df_financeiro_novo
                     st.cache_data.clear()
                 except Exception as api_err:
                     st.error("🛑 Erro de Gravação na Planilha!")
@@ -776,7 +783,8 @@ elif menu == "🖨️ Imprimir Prontuário":
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
             
-            st.markdown(f"""
+            # Correção crítica: renderizando como bloco HTML estruturado correto
+            st.write(f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
                     <h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
