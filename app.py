@@ -87,9 +87,12 @@ st.markdown("""
 def limpiar_dataframe(df):
     if df is None or df.empty:
         return pd.DataFrame()
-    df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
-    df.columns = df.columns.str.strip()
-    df = df.dropna(how="all")
+    try:
+        df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
+        df.columns = df.columns.str.strip()
+        df = df.dropna(how="all")
+    except:
+        return pd.DataFrame()
     return df
 
 def formatar_brl(valor):
@@ -127,9 +130,11 @@ def converter_para_float(valor):
 
 def calcular_idade(data_nasc_str):
     try:
-        if pd.isna(data_nasc_str) or not data_nasc_str:
+        if pd.isna(data_nasc_str) or not data_nasc_str or str(data_nasc_str).strip() == "":
             return None
-        data_nasc = pd.to_datetime(data_nasc_str, dayfirst=True)
+        data_nasc = pd.to_datetime(str(data_nasc_str).strip(), dayfirst=True, errors='coerce')
+        if pd.isna(data_nasc):
+            return None
         hoje = datetime.now()
         return hoje.year - data_nasc.year - ((hoje.month, hoje.day) < (data_nasc.month, data_nasc.day))
     except:
@@ -156,19 +161,20 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=5))
+    # TTL aumentado para 60 segundos para evitar sobrecarga de requisições e loopings de rede
+    try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=60))
     except: pass
     
-    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro", ttl=5))
+    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro", ttl=60))
     except: pass
     
-    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera", ttl=5))
+    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera", ttl=60))
     except: pass
     
-    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos", ttl=5))
+    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos", ttl=60))
     except: pass
     
-    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao", ttl=5))
+    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao", ttl=60))
     except: pass
 
     if not df_alunos.empty:
@@ -274,9 +280,10 @@ if menu == "📅 Agenda":
     if not df_alunos.empty and "Nascimento" in df_alunos.columns and "Nome" in df_alunos.columns:
         for idx, row in df_alunos.iterrows():
             try:
-                data_nasc = pd.to_datetime(row["Nascimento"], dayfirst=True)
-                if data_nasc.strftime("%m-%d") == hoje_mm_dd:
-                    niver_hoje.append(row["Nome"])
+                if pd.notna(row["Nascimento"]) and str(row["Nascimento"]).strip() != "":
+                    data_nasc = pd.to_datetime(str(row["Nascimento"]).strip(), dayfirst=True, errors='coerce')
+                    if not pd.isna(data_nasc) and data_nasc.strftime("%m-%d") == hoje_mm_dd:
+                        niver_hoje.append(row["Nome"])
             except:
                 continue
                 
@@ -293,28 +300,36 @@ if menu == "📅 Agenda":
     else:                       dias_validos_busca, nome_dia_formatado = ["DOM", "DOMINGO"], "Domingo"
 
     st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if not df_alunos.empty else pd.DataFrame()
+    
+    if not df_alunos.empty and "Status" in df_alunos.columns:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
         
-    if not df_ativos.empty:
-        if "Dias" in df_ativos.columns:
-            condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
-            df_agenda = df_ativos[condicao_dia]
+        if not df_ativos.empty:
+            if "Dias" in df_ativos.columns:
+                condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
+                df_agenda = df_ativos[condicao_dia]
+            else:
+                df_agenda = df_ativos.copy()
+                
+            if not df_agenda.empty and "Horario" in df_agenda.columns:
+                df_agenda = df_agenda.sort_values(by="Horario")
+                colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
+                st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
+            else:
+                st.warning(f"Nenhum aluno agendado para esta {nome_dia_formatado}.")
         else:
-            df_agenda = df_ativos.copy()
-            
-        if not df_agenda.empty and "Horario" in df_agenda.columns:
-            df_agenda = df_agenda.sort_values(by="Horario")
-            colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
-            st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
-        else:
-            st.warning(f"Nenhum aluno agendado para esta {nome_dia_formatado}.")
+            st.warning("Nenhum aluno ativo encontrado.")
     else:
-        st.warning("Nenhum aluno ativo encontrado.")
+        st.warning("Nenhum aluno cadastrado.")
 
 # --- 2. TELA: ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Base de Alunos Ativos")
-    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if not df_alunos.empty else pd.DataFrame()
+    
+    if not df_alunos.empty and "Status" in df_alunos.columns:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
+    else:
+        df_ativos = pd.DataFrame()
 
     if not df_ativos.empty:
         st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
@@ -423,7 +438,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra.strip()
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Alterações cadastrais e clínicas salvas com sucesso!")
+                st.success("🎉 Alterações salvas! Aguarde a atualização agendada ou mude de menu.")
                 st.cache_data.clear()
                 
             if btn_inativar_alt:
@@ -434,7 +449,7 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
-# --- 3. TELA: CADASTRO (SOLUÇÃO DEFINITIVA SEM ST.RERUN) ---
+# --- 3. TELA: CADASTRO ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
@@ -485,22 +500,21 @@ elif menu == "📝 Cadastro":
         st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
         st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
         
-        t_lombar = st.checkbox("🔳 Dor Lombar (Lombalgia)", key="k_lombar")
-        t_cervical = st.checkbox("🔳 Dor Cervical (Cervicalgia)", key="k_cervical")
-        t_gestante = st.checkbox("🔳 Pilates para Gestantes", key="k_gestante")
-        t_hernia = st.checkbox("🔳 Hérnia de Disco / Protrusão", key="k_hernia")
-        t_joelhos = st.checkbox("🔳 Dor / Lesão nos Joelhos", key="k_joelhos")
-        t_idoso = st.checkbox("🔳 Pilates para Terceira Idade (Idosos)", key="k_idoso")
-        t_ombros = st.checkbox("🔳 Dor / Lesão nos Ombros", key="k_ombros")
-        t_postural = st.checkbox("🔳 Melhoria Postural Operacional", key="k_postural")
-        t_condic = st.checkbox("🔳 Condicionamento Físico Geral", key="k_condic")
+        t_lombar = st.checkbox("Dora Lombar (Lombalgia)", key="k_lombar")
+        t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="k_cervical")
+        t_gestante = st.checkbox("Pilates para Gestantes", key="k_gestante")
+        t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="k_hernia")
+        t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="k_joelhos")
+        t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="k_idoso")
+        t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="k_ombros")
+        t_postural = st.checkbox("Melhoria Postural Operacional", key="k_postural")
+        t_condic = st.checkbox("Condicionamento Físico Geral", key="k_condic")
             
         queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
-        # O processamento ocorre de forma puramente linear sem st.rerun() para não prender o gatilho de execução
         if btn_enviar:
             dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
             dias_c = "/".join(dias_lista)
@@ -600,15 +614,15 @@ elif menu == "⏳ Espera":
 # --- 6. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro")
-    total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty else 0.0
-    total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty else 0.0
+    total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty and "Status" in df_financeiro.columns else 0.0
+    total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty and "Status" in df_financeiro.columns else 0.0
     
     f_col1, f_col2 = st.columns(2)
     with f_col1: st.metric("Total Recebido", formatar_brl(total_recebido))
     with f_col2: st.metric("Total Pendente", formatar_brl(total_pendente))
         
     st.markdown("### 📥 Registrar Baixa de Pagamento")
-    if not df_alunos.empty:
+    if not df_alunos.empty and "Status" in df_alunos.columns:
         opcoes_baixa = [f"{r['Nome']} | Vencimento: {r.get('Vencimento','10')} | Valor: {formatar_brl(r.get('Valor', 0))}" for _, r in df_alunos.iterrows() if str(r.get("Status")).upper() == "ATIVO"]
         if opcoes_baixa:
             sel_baixa = st.selectbox("Selecione o aluno:", opcoes_baixa)
@@ -625,7 +639,7 @@ elif menu == "💰 Financeiro":
                 
                 try:
                     conn.update(worksheet="financeiro", data=df_financeiro_novo)
-                    st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso no Google Sheets!")
+                    st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso!")
                     df_financeiro = df_financeiro_novo
                     st.cache_data.clear()
                 except Exception as api_err:
@@ -640,7 +654,7 @@ elif menu == "💰 Financeiro":
             df_fin_exibicao["Valor"] = df_fin_exibicao["Valor"].apply(formatar_brl)
         st.dataframe(df_fin_exibicao, use_container_width=True, hide_index=True)
 
-# --- 7. TELA: PERFIL ---
+# --- 7. TELA: PERFIL (BLINDAGEM COMPLETA CONTRA LOOPS GRÁFICOS) ---
 elif menu == "👤 Perfil":
     st.title("👤 Configurações de Perfil e Estatísticas")
     st.write(f"**Conexão do Banco de Dados:** {'Operacional' if conexao_ok else 'Erro de Comunicação'}")
@@ -649,68 +663,82 @@ elif menu == "👤 Perfil":
     st.markdown("---")
     st.markdown("### 📊 Métricas e Previsões Estatísticas")
     
-    if not df_alunos.empty:
-        df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"].copy()
-        if df_ativos_graficos.empty:
-            df_ativos_graficos = df_alunos.copy()
+    if not df_alunos.empty and "Status" in df_alunos.columns:
+        try:
+            df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"].copy()
+            if df_ativos_graficos.empty:
+                df_ativos_graficos = df_alunos.copy()
+                
+            cg1, cg2 = st.columns(2)
             
-        cg1, cg2 = st.columns(2)
-        
-        with cg1:
-            st.markdown("#### Distribuição dos Alunos por Faixa Etária")
-            df_ativos_graficos["Idade"] = df_ativos_graficos["Nascimento"].apply(calcular_idade)
-            
-            if not df_ativos_graficos["Idade"].dropna().empty:
-                def categorizar_faixa(idade):
-                    if idade < 18: return "Menor de 18"
-                    elif idade <= 29: return "18-29 anos"
-                    elif idade <= 45: return "30-45 anos"
-                    elif idade <= 60: return "46-60 anos"
-                    else: return "Acima de 60"
+            with cg1:
+                st.markdown("#### Distribuição dos Alunos por Faixa Etária")
+                if "Nascimento" in df_ativos_graficos.columns:
+                    df_ativos_graficos["Idade"] = df_ativos_graficos["Nascimento"].apply(calcular_idade)
                     
-                df_ativos_graficos["Faixa Etária"] = df_ativos_graficos["Idade"].apply(categorizar_faixa)
-                df_faixa = df_ativos_graficos["Faixa Etária"].value_counts().reset_index()
-                df_faixa.columns = ["Faixa Etária", "Quantidade"]
-                
-                fig_faixa = px.bar(df_faixa, x="Faixa Etária", y="Quantidade", text="Quantidade", color_discrete_sequence=["#FFD700"])
-                fig_faixa.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
-                st.plotly_chart(fig_faixa, use_container_width=True)
-            else:
-                st.info("Cadastre datas de nascimento válidas para ver o gráfico de idades.")
-                
-        with cg2:
-            st.markdown("#### Previsão de Recebimento Mensal (Por Dia de Vencimento)")
-            if "Vencimento" in df_ativos_graficos.columns and "Valor" in df_ativos_graficos.columns:
-                df_ativos_graficos["Valor_Float"] = df_ativos_graficos["Valor"].apply(converter_para_float)
-                df_ativos_graficos["Dia Vencimento"] = df_ativos_graficos["Vencimento"].fillna(10).astype(int).astype(str)
-                
-                df_prev = df_ativos_graficos.groupby("Dia Vencimento")["Valor_Float"].sum().reset_index()
-                df_prev = df_prev.sort_values(by="Dia Vencimento", key=lambda x: x.astype(int))
-                
-                fig_prev = px.bar(df_prev, x="Dia Vencimento", y="Valor_Float", text="Valor_Float", color_discrete_sequence=["#2E5A44"])
-                fig_prev.update_traces(texttemplate='R$ %{text:,.2f}', textposition='outside')
-                fig_prev.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300, yaxis_title="Total Previsto (R$)", xaxis_title="Dia do Mês")
-                st.plotly_chart(fig_prev, use_container_width=True)
-            else:
-                st.info("Dados insuficientes para calcular previsões financeiras.")
-                
-        cg3, cg4 = st.columns(2)
-        with cg3:
-            st.markdown("#### Alunos por Tipo de Plano")
-            if "Plano" in df_ativos_graficos.columns:
-                df_contagem_plano = df_ativos_graficos["Plano"].value_counts().reset_index()
-                df_contagem_plano.columns = ["Plano", "Quantidade"]
-                fig1 = px.bar(df_contagem_plano, x="Plano", y="Quantidade", text="Quantidade", color_discrete_sequence=["#2E5A44"])
-                fig1.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
-                st.plotly_chart(fig1, use_container_width=True)
-        with cg4:
-            st.markdown("#### Distribuição por Gênero")
-            if "Genero" in df_ativos_graficos.columns:
-                df_contagem_genero = df_ativos_graficos["Genero"].value_counts().reset_index()
-                df_contagem_genero.columns = ["Gênero", "Quantidade"]
-                fig2 = px.pie(df_contagem_genero, names="Gênero", values="Quantidade", color_discrete_sequence=["#2E5A44", "#FFD700", "#7f7f7f"])
-                fig2.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
-                st.plotly_chart(fig2, use_container_width=True)
+                    df_validos = df_ativos_graficos.dropna(subset=["Idade"])
+                    if not df_validos.empty:
+                        def categorizar_faixa(idade):
+                            try:
+                                id_int = int(idade)
+                                if id_int < 18: return "Menor de 18"
+                                elif id_int <= 29: return "18-29 anos"
+                                elif id_int <= 45: return "30-45 anos"
+                                elif id_int <= 60: return "46-60 anos"
+                                else: return "Acima de 60"
+                            except:
+                                return "Não Informado"
+                                
+                        df_ativos_graficos["Faixa Etária"] = df_ativos_graficos["Idade"].apply(categorizar_faixa)
+                        df_faixa = df_ativos_graficos["Faixa Etária"].value_counts().reset_index()
+                        df_faixa.columns = ["Faixa Etária", "Quantidade"]
+                        
+                        fig_faixa = px.bar(df_faixa, x="Faixa Etária", y="Quantidade", text="Quantidade", color_discrete_sequence=["#FFD700"])
+                        fig_faixa.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                        st.plotly_chart(fig_faixa, use_container_width=True)
+                    else:
+                        st.info("Aguardando inserção de idades estruturadas para exibição térmica.")
+                else:
+                    st.info("Coluna 'Nascimento' ausente.")
+                    
+            with cg2:
+                st.markdown("#### Previsão de Recebimento Mensal (Por Dia de Vencimento)")
+                if "Vencimento" in df_ativos_graficos.columns and "Valor" in df_ativos_graficos.columns:
+                    df_ativos_graficos["Valor_Float"] = df_ativos_graficos["Valor"].apply(converter_para_float)
+                    df_ativos_graficos["Dia Vencimento"] = df_ativos_graficos["Vencimento"].fillna(10).astype(str)
+                    
+                    df_prev = df_ativos_graficos.groupby("Dia Vencimento")["Valor_Float"].sum().reset_index()
+                    if not df_prev.empty:
+                        fig_prev = px.bar(df_prev, x="Dia Vencimento", y="Valor_Float", text="Valor_Float", color_discrete_sequence=["#2E5A44"])
+                        fig_prev.update_traces(texttemplate='R$ %{text:,.2f}', textposition='outside')
+                        fig_prev.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300, yaxis_title="Total Previsto (R$)", xaxis_title="Dia do Mês")
+                        st.plotly_chart(fig_prev, use_container_width=True)
+                else:
+                    st.info("Dados insuficientes para calcular previsões financeiras.")
+                    
+            cg3, cg4 = st.columns(2)
+            with cg3:
+                st.markdown("#### Alunos por Tipo de Plano")
+                if "Plano" in df_ativos_graficos.columns and not df_ativos_graficos["Plano"].dropna().empty:
+                    df_contagem_plano = df_ativos_graficos["Plano"].value_counts().reset_index()
+                    df_contagem_plano.columns = ["Plano", "Quantidade"]
+                    fig1 = px.bar(df_contagem_plano, x="Plano", y="Quantidade", text="Quantidade", color_discrete_sequence=["#2E5A44"])
+                    fig1.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                    st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("Sem dados de planos cadastrados.")
+            with cg4:
+                st.markdown("#### Distribuição por Gênero")
+                if "Genero" in df_ativos_graficos.columns and not df_ativos_graficos["Genero"].dropna().empty:
+                    df_contagem_genero = df_ativos_graficos["Genero"].value_counts().reset_index()
+                    df_contagem_genero.columns = ["Gênero", "Quantidade"]
+                    fig2 = px.pie(df_contagem_genero, names="Gênero", values="Quantidade", color_discrete_sequence=["#2E5A44", "#FFD700", "#7f7f7f"])
+                    fig2.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("Sem dados de gêneros.")
+        except Exception as graph_err:
+            st.warning("⚠️ O motor gráfico detectou dados inconsistentes e foi pausado para evitar crash.")
     else:
         st.info("Nenhum gráfico para exibir. Adicione alunos no banco de dados.")
 
@@ -724,8 +752,10 @@ elif menu == "⚙️ Preços":
 # --- 9. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
     st.title("📁 Alunos Inativos")
-    if not df_alunos.empty:
+    if not df_alunos.empty and "Status" in df_alunos.columns:
         st.dataframe(df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"], use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum registro inativo encontrado.")
 
 # --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
@@ -737,7 +767,7 @@ elif menu == "🖨️ Imprimir Prontuário":
         
         if aluno_p:
             dados = df_alunos[df_alunos["Nome"] == aluno_p].iloc[0]
-            evolucoes_aluno = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_p] if not df_evolucoes.empty else pd.DataFrame()
+            evolucoes_aluno = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_p] if not df_evolucoes.empty and "Nome do Aluno" in df_evolucoes.columns else pd.DataFrame()
             
             html_evolucoes = ""
             if not evolucoes_aluno.empty:
