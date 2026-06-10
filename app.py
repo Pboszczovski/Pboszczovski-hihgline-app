@@ -161,7 +161,7 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # TTL aumentado para 60 segundos para evitar sobrecarga de requisições e loopings de rede
+    # TTL ajustado para 60 segundos para evitar sobrecarga de requisições e loopings de rede
     try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=60))
     except: pass
     
@@ -228,9 +228,9 @@ def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None)
 # 3. BARRA LATERAL - LOGO E MENU
 # ==========================================
 with st.sidebar:
-    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-    st.markdown("## 🏋️‍♂️ Studio Highline")
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-bottom: 20px; font-size: 45px;'>🏋️‍♂️</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: white; margin-top: -20px; font-family: sans-serif; letter-spacing: 1px;'>Highline</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #FFD700; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px;'>Management</p>", unsafe_allow_html=True)
         
     st.markdown("🔒 **Menu de Navegação**")
     
@@ -366,7 +366,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
             bloqueio_edicao = False
-            if novos_dias and novo_horario:
+            if novos_dias and font_size := novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -438,7 +438,7 @@ elif menu == "👥 Alunos":
                 df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra.strip()
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Alterações salvas! Aguarde a atualização agendada ou mude de menu.")
+                st.success("🎉 Alterações salvas no banco de dados!")
                 st.cache_data.clear()
                 
             if btn_inativar_alt:
@@ -498,13 +498,13 @@ elif menu == "📝 Cadastro":
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
         st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
-        st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
+        st.write("Marque abaixo todas as condições clínicas e objectives aplicáveis a este aluno:")
         
-        t_lombar = st.checkbox("Dora Lombar (Lombalgia)", key="k_lombar")
+        t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="k_lombar")
         t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="k_cervical")
         t_gestante = st.checkbox("Pilates para Gestantes", key="k_gestante")
         t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="k_hernia")
-        t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="k_joelhos")
+        t_joelhos = st.checkbox("Dor / Lesão nos Joelhes", key="k_joelhos")
         t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="k_idoso")
         t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="k_ombros")
         t_postural = st.checkbox("Melhoria Postural Operacional", key="k_postural")
@@ -654,7 +654,7 @@ elif menu == "💰 Financeiro":
             df_fin_exibicao["Valor"] = df_fin_exibicao["Valor"].apply(formatar_brl)
         st.dataframe(df_fin_exibicao, use_container_width=True, hide_index=True)
 
-# --- 7. TELA: PERFIL (BLINDAGEM COMPLETA CONTRA LOOPS GRÁFICOS) ---
+# --- 7. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Configurações de Perfil e Estatísticas")
     st.write(f"**Conexão do Banco de Dados:** {'Operacional' if conexao_ok else 'Erro de Comunicação'}")
