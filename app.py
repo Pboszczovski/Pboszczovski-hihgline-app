@@ -36,7 +36,7 @@ st.markdown("""
         }
         .prontuario-card {
             background-color: #ffffff;
-            color: #000000;
+            color: #000000 !important;
             padding: 25px;
             border: 2px solid #2E5A44;
             border-radius: 8px;
@@ -267,7 +267,7 @@ if menu == "📅 Agenda":
     dia_semana_num = hoje_datetime.weekday()
     if dia_semana_num == 0:     dias_validos_busca, nome_dia_formatado = ["SEG", "2A", "SEGUNDA"], "Segunda-feira"
     elif dia_semana_num == 1:   dias_validos_busca, nome_dia_formatado = ["TER", "3A", "TERÇA", "TERCA"], "Terça-feira"
-    elif dia_semana_num == 2:   dias_validos_busca, nome_dia_formatado = ["QUA", "4A", "QUARTA"], "Quinta-feira"
+    elif dia_semana_num == 2:   dias_validos_busca, nome_dia_formatado = ["QUA", "4A", "QUARTA"], "Quarta-feira"
     elif dia_semana_num == 3:   dias_validos_busca, nome_dia_formatado = ["QUI", "5A", "QUINTA"], "Quinta-feira"
     elif dia_semana_num == 4:   dias_validos_busca, nome_dia_formatado = ["SEX", "6A", "SEXTA"], "Sexta-feira"
     elif dia_semana_num == 5:   dias_validos_busca, nome_dia_formatado = ["SAB", "SÁBADO", "SABADO"], "Sábado"
@@ -462,7 +462,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
@@ -552,9 +552,12 @@ elif menu == "👤 Perfil":
     st.markdown("---")
     st.markdown("### 📊 Métricas de Ocupação do Studio")
     
-    df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if not df_alunos.empty else pd.DataFrame()
-    
-    if not df_ativos_graficos.empty:
+    # AJUSTE DE SEGURANÇA: Se a base estiver instável, puxamos qualquer dado disponível para não sumir com o gráfico
+    if not df_alunos.empty:
+        df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
+        if df_ativos_graficos.empty:
+            df_ativos_graficos = df_alunos.copy()
+            
         cg1, cg2 = st.columns(2)
         
         with cg1:
@@ -594,7 +597,6 @@ elif menu == "📁 Arquivo Morto":
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Ficha Cadastral e Prontuário do Aluno")
     
-    # CORREÇÃO CRÍTICA: Busca direta sobre qualquer linha da planilha de alunos para evitar travamentos
     if not df_alunos.empty and "Nome" in df_alunos.columns:
         lista_prontuario_geral = sorted(list(df_alunos["Nome"].dropna().unique()))
         aluno_p = st.selectbox("Selecione o Aluno para Emitir Documentação:", lista_prontuario_geral)
@@ -609,48 +611,46 @@ elif menu == "🖨️ Imprimir Prontuário":
                     html_evolucoes += f"<p style='margin:4px 0; border-bottom:1px dashed #eee; padding-bottom:4px; color:#000000;'><b>{r['Data']}:</b> {r['Evolução']}</p>"
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
-                
-            st.markdown(f"""
-            <div class="prontuario-card">
-                <div class="prontuario-header">
-                    <h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
-                    <span style="font-size:12px; text-transform: uppercase; color:#555;">Ficha Prontuário de Acompanhamento Técnico</span>
-                </div>
-                
-                <table class="tabela-prontuario">
-                    <tr>
-                        <td style="width:50%;"><b>Nome do Aluno:</b> {dados.get('Nome', '-')}</td>
-                        <td style="width:50%;"><b>CPF:</b> {dados.get('CPF', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td><b>WhatsApp / Contato:</b> {dados.get('Telefone', '-')}</td>
-                        <td><b>Data de Nascimento:</b> {dados.get('Nascimento', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td><b>Gênero:</b> {dados.get('Genero', '-')}</td>
-                        <td><b>Início das Atividades:</b> {dados.get('Inicio_Aulas', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td><b>Plano Vinculado:</b> {dados.get('Plano', '-')}</td>
-                        <td><b>Grade Horária Fixa:</b> {dados.get('Dias', '-')} às {dados.get('Horario', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2"><b>Endereço Residencial:</b> {dados.get('Endereco', '-')} (Bairro: {dados.get('Bairro', '-')})</td>
-                    </tr>
-                </table>
-                
-                <div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
-                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
-                
-                <div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
-                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
-                
-                <div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
-                <div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
-                    {html_evolucoes}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            
+            # BLINDAGEM FIX: HTML limpo e concatenado sem recuos/tabs internos para impedir que o Streamlit interprete como bloco de código markdown
+            prontuario_html = f"""<div class="prontuario-card">
+<div class="prontuario-header">
+<h2 style="margin:0; letter-spacing: 1px; color:#2E5A44;">STUDIO HIGHLINE PILATES</h2>
+<span style="font-size:12px; text-transform: uppercase; color:#555;">Ficha Prontuário de Acompanhamento Técnico</span>
+</div>
+<table class="tabela-prontuario">
+<tr>
+<td style="width:50%;"><b>Nome do Aluno:</b> {dados.get('Nome', '-')}</td>
+<td style="width:50%;"><b>CPF:</b> {dados.get('CPF', '-')}</td>
+</tr>
+<tr>
+<td><b>WhatsApp / Contato:</b> {dados.get('Telefone', '-')}</td>
+<td><b>Data de Nascimento:</b> {dados.get('Nascimento', '-')}</td>
+</tr>
+<tr>
+<td><b>Gênero:</b> {dados.get('Genero', '-')}</td>
+<td><b>Início das Atividades:</b> {dados.get('Inicio_Aulas', '-')}</td>
+</tr>
+<tr>
+<td><b>Plano Vinculado:</b> {dados.get('Plano', '-')}</td>
+<td><b>Grade Horária Fixa:</b> {dados.get('Dias', '-')} às {dados.get('Horario', '-')}</td>
+</tr>
+<tr>
+<td colspan="2"><b>Endereço Residencial:</b> {dados.get('Endereco', '-')} (Bairro: {dados.get('Bairro', '-')})</td>
+</tr>
+</table>
+<div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
+<p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
+<div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
+<p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
+<div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
+<div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
+{html_evolucoes}
+</div>
+</div>"""
+
+            # Força a renderização do HTML nativo
+            st.components.v1.html(prontuario_html, height=750, scrolling=True)
             
             st.write("")
             st.markdown("<p class='no-print' style='color:#666; font-size:13px;'>💡 <b>Suporte para Impressão limpa:</b> Pressione <b>Ctrl + P</b> (ou <b>Cmd + P</b> no Mac). A barra lateral verde e os botões serão ocultados de forma automática na folha.</p>", unsafe_allow_html=True)
