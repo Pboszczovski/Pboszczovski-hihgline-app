@@ -478,10 +478,16 @@ elif menu == "📝 Cadastro":
 
         st.subheader("1. Dados Pessoais e de Contrato")
         col_p1, col_p2 = st.columns(2)
+        
+        # Correção aqui: tiramos o number_input de dentro do formulário estático ou usamos uma variável dinâmica baseada no dicionário
         with col_p1:
             plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+            
+        # Pega o valor correto do dicionário antes de renderizar o campo numérico
+        valor_sugerido_plano = float(dict_precos_padrao.get(plano_c, 180.0))
+            
         with col_p2:
-            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(dict_precos_padrao.get(plano_c, 220.0)))
+            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=valor_sugerido_plano, step=10.0)
 
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
@@ -518,55 +524,6 @@ elif menu == "📝 Cadastro":
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
-        
-        if btn_enviar:
-            dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
-            dias_c = "/".join(dias_lista)
-            horario_c = ", ".join(horarios_selecionados)
-
-            if not dias_c or not horario_c:
-                st.error("❌ Selecione pelo menos um Dia e Horário!")
-            elif not nome_c or not tel_c:
-                st.error("❌ Preencha o Nome e o WhatsApp!")
-            else:
-                conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
-                if conflitos:
-                    for dia_lotado, hora_lotada, qtd in conflitos:
-                        st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
-                else:
-                    tratamentos = []
-                    mapeamento_cadastro = [
-                        ("Dor Lombar (Lombalgia)", t_lombar),
-                        ("Hérnia de Disco / Protrusão", t_hernia),
-                        ("Dor / Lesão nos Ombros", t_ombros),
-                        ("Dor Cervical (Cervicalgia)", t_cervical),
-                        ("Dor / Lesão nos Joelhos", t_joelhos),
-                        ("Melhoria Postural Operacional", t_postural),
-                        ("Pilates para Gestantes", t_gestante),
-                        ("Pilates para Terceira Idade (Idosos)", t_idoso),
-                        ("Condicionamento Físico Geral", t_condic)
-                    ]
-                    
-                    for nome_queixa, marcado in mapeamento_cadastro:
-                        if marcado:
-                            tratamentos.append(nome_queixa)
-                            
-                    if queixa_extra.strip(): 
-                        tratamentos.append(queixa_extra.strip())
-                    
-                    nova_linha = {
-                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
-                        "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
-                        "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
-                        "Endereco": f"{endereco_base} {complemento_c}".strip()
-                    }
-                    
-                    df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                    conn.update(worksheet="alunos", data=df_alunos)
-                    st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
-                    st.cache_data.clear()
-
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
     st.title("📈 Evolução Clínica dos Alunos")
