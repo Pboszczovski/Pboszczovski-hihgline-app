@@ -125,6 +125,16 @@ def converter_para_float(valor):
     except:
         return 0.0
 
+def calcular_idade(data_nasc_str):
+    try:
+        if pd.isna(data_nasc_str) or not data_nasc_str:
+            return None
+        data_nasc = pd.to_datetime(data_nasc_str, dayfirst=True)
+        hoje = datetime.now()
+        return hoje.year - data_nasc.year - ((hoje.month, hoje.day) < (data_nasc.month, data_nasc.day))
+    except:
+        return None
+
 # ==========================================
 # 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
 # ==========================================
@@ -329,7 +339,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
             bloqueio_edicao = False
-            if novos_dias and novo_horario:
+            if novos_dias and? novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -363,7 +373,6 @@ elif menu == "👥 Alunos":
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    # UNIFICAÇÃO DOS COMPONENTES DENTRO DO FORMULÁRIO DO STREAMLIT
     with st.form("form_dados_anamnese_completo"):
         st.subheader("📌 Escolha de Dias e Horários de Treino")
         c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
@@ -408,19 +417,20 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        st.subheader("2. Anamnese: Queixas Principais e Sintomas")
-        c_q1, c_q2, c_q3 = st.columns(3)
-        with c_q1:
-            q_lombar = st.checkbox("Dor Lombar (Lombalgia)")
-            q_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
-        with c_q2:
-            q_hernia = st.checkbox("Hérnia de Disco / Protrusão")
-            q_joelho = st.checkbox("Dor / Lesão nos Joelhos")
-        with c_q3:
-            q_ombro = st.checkbox("Dor / Lesão nos Ombros")
-            q_postura = st.checkbox("Melhoria Postural Operacional")
+        # PONTO 2 CORRIGIDO: Volta das modalidades e tratamentos principais de Pilates nos Checkboxes
+        st.subheader("2. Anamnese: Objetivos e Tratamentos de Pilates")
+        c_t1, c_t2, c_t3 = st.columns(3)
+        with c_t1:
+            t_reab = st.checkbox("Pilates Clínico / Reabilitação")
+            t_coluna = st.checkbox("Patologias da Coluna (Hérnias/Escoliose)")
+        with c_t2:
+            t_cond = st.checkbox("Condicionamento Físico Geral")
+            t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)")
+        with c_t3:
+            t_gest = st.checkbox("Pilates para Gestantes")
+            t_postura = st.checkbox("Melhoria Postural Operacional / Dores")
             
-        queixa_extra = st.text_input("Outras Queixas Adicionais:")
+        queixa_extra = st.text_input("Outras Patologias / Observações Clínicas Adicionais:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
@@ -440,13 +450,13 @@ elif menu == "📝 Cadastro":
                     for dia_lotado, hora_lotada, qtd in conflitos:
                         st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
                 else:
-                    queixas = [q for q, m in [("Lombar", q_lombar), ("Cervical", q_cervical), ("Hérnia", q_hernia), ("Joelho", q_joelho), ("Ombro", q_ombro), ("Postural", q_postura)] if m]
-                    if queixa_extra: queixas.append(queixa_extra)
+                    tratamentos = [t for t, m in [("Reabilitação", t_reab), ("Patologias Coluna", t_coluna), ("Condicionamento", t_cond), ("Idosos", t_idoso), ("Gestantes", t_gest), ("Postural", t_postura)] if m]
+                    if queixa_extra: tratamentos.append(queixa_extra)
                     
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
                         "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                        "Status": "Ativo", "Queixa": " | ".join(queixas), "Conduta": conduta_extra, 
+                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra, 
                         "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
                         "Endereco": f"{endereco_base} {complemento_c}".strip()
                     }
@@ -462,7 +472,8 @@ elif menu == "📈 Evolução":
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
-    with st.form("form_nova_evolucao"):
+    # PONTO 1 CORRIGIDO: Adicionado clear_on_submit=True para limpar a caixa após salvar
+    with st.form("form_nova_evolucao", clear_on_submit=True):
         nome_aluno_evol = st.selectbox("Selecione o Aluno:", lista_nomes_alunos)
         texto_evol = st.text_area("Registro de Evolução/Conduta do dia:")
         data_registro = st.date_input("Data do Registro:", datetime.now())
@@ -474,12 +485,11 @@ elif menu == "📈 Evolução":
                 nova_evol = {"Data": data_registro.strftime("%d/%m/%Y"), "Nome do Aluno": nome_aluno_evol, "Evolução": texto_evol}
                 df_evolucoes = pd.concat([df_evolucoes, pd.DataFrame([nova_evol])], ignore_index=True)
                 conn.update(worksheet="evolucao", data=df_evolucoes)
-                st.success("🎉 Evolução registrada!")
+                st.success("🎉 Evolução registrada com sucesso!")
                 st.cache_data.clear()
 
     st.markdown("---")
     
-    # PROTEÇÃO CONTRA FILTROS DE ARRAYS VAZIOS
     if not df_alunos.empty:
         opcoes_filtro = ["Todos"] + sorted(list(df_alunos["Nome"].dropna().unique()))
         aluno_filtro = st.selectbox("Ver histórico do aluno:", opcoes_filtro)
@@ -549,13 +559,58 @@ elif menu == "👤 Perfil":
     if erro_msg: st.error(erro_msg)
     
     st.markdown("---")
-    st.markdown("### 📊 Métricas de Ocupação do Studio")
+    st.markdown("### 📊 Métricas e Previsões Estatísticas")
     
     if not df_alunos.empty:
-        df_ativos_graficos = df_alunos.copy()
+        df_ativos_graficos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"].copy()
+        if df_ativos_graficos.empty:
+            df_ativos_graficos = df_alunos.copy()
+            
         cg1, cg2 = st.columns(2)
         
         with cg1:
+            # PONTO 3 CORRIGIDO: Volta do Gráfico por Faixa Etária
+            st.markdown("#### Distribuição dos Alunos por Faixa Etária")
+            df_ativos_graficos["Idade"] = df_ativos_graficos["Nascimento"].apply(calcular_idade)
+            
+            if not df_ativos_graficos["Idade"].dropna().empty:
+                def categorizar_faixa(idade):
+                    if idade < 18: return "Menor de 18"
+                    elif idade <= 29: return "18-29 anos"
+                    elif idade <= 45: return "30-45 anos"
+                    elif idade <= 60: return "46-60 anos"
+                    else: return "Acima de 60"
+                    
+                df_ativos_graficos["Faixa Etária"] = df_ativos_graficos["Idade"].apply(categorizar_faixa)
+                df_faixa = df_ativos_graficos["Faixa Etária"].value_counts().reset_index()
+                df_faixa.columns = ["Faixa Etária", "Quantidade"]
+                
+                fig_faixa = px.bar(df_faixa, x="Faixa Etária", y="Quantidade", text="Quantidade", color_discrete_sequence=["#FFD700"])
+                fig_faixa.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                st.plotly_chart(fig_faixa, use_container_width=True)
+            else:
+                st.info("Cadastre datas de nascimento válidas para ver o gráfico de idades.")
+                
+        with cg2:
+            # PONTO 3 CORRIGIDO: Volta do Gráfico de Previsão de Recebimento distribuído no mês
+            st.markdown("#### Previsão de Recebimento Mensal (Por Dia de Vencimento)")
+            if "Vencimento" in df_ativos_graficos.columns and "Valor" in df_ativos_graficos.columns:
+                df_ativos_graficos["Valor_Float"] = df_ativos_graficos["Valor"].apply(converter_para_float)
+                df_ativos_graficos["Dia Vencimento"] = df_ativos_graficos["Vencimento"].fillna(10).astype(int).astype(str)
+                
+                df_prev = df_ativos_graficos.groupby("Dia Vencimento")["Valor_Float"].sum().reset_index()
+                df_prev = df_prev.sort_values(by="Dia Vencimento", key=lambda x: x.astype(int))
+                
+                fig_prev = px.bar(df_prev, x="Dia Vencimento", y="Valor_Float", text="Valor_Float", color_discrete_sequence=["#2E5A44"])
+                fig_prev.update_traces(texttemplate='R$ %{text:,.2f}', textposition='outside')
+                fig_prev.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300, yaxis_title="Total Previsto (R$)", xaxis_title="Dia do Mês")
+                st.plotly_chart(fig_prev, use_container_width=True)
+            else:
+                st.info("Dados insuficientes para calcular previsões financeiras.")
+                
+        # Segunda linha de gráficos (Planos e Gênero)
+        cg3, cg4 = st.columns(2)
+        with cg3:
             st.markdown("#### Alunos por Tipo de Plano")
             if "Plano" in df_ativos_graficos.columns:
                 df_contagem_plano = df_ativos_graficos["Plano"].value_counts().reset_index()
@@ -563,8 +618,7 @@ elif menu == "👤 Perfil":
                 fig1 = px.bar(df_contagem_plano, x="Plano", y="Quantidade", text="Quantidade", color_discrete_sequence=["#2E5A44"])
                 fig1.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
                 st.plotly_chart(fig1, use_container_width=True)
-                
-        with cg2:
+        with cg4:
             st.markdown("#### Distribuição por Gênero")
             if "Genero" in df_ativos_graficos.columns:
                 df_contagem_genero = df_ativos_graficos["Genero"].value_counts().reset_index()
@@ -573,7 +627,7 @@ elif menu == "👤 Perfil":
                 fig2.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
                 st.plotly_chart(fig2, use_container_width=True)
     else:
-        st.info("Nenhum gráfico para exibir. Adicione alunos ativos na aba Cadastro.")
+        st.info("Nenhum gráfico para exibir. Adicione alunos no banco de dados.")
 
 # --- 8. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
@@ -607,7 +661,6 @@ elif menu == "🖨️ Imprimir Prontuário":
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
             
-            # RESOLUÇÃO DO CONTEXTO VISUAL: Renderização via Markdown Direto com Unsafe HTML (Garante estilização css no escopo raiz)
             st.markdown(f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
