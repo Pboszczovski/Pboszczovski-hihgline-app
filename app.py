@@ -436,11 +436,11 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
-# --- 3. TELA: CADASTRO (MÓDULO DE CHECKBOXES TOTALMENTE RECONSTRUÍDO E VISÍVEL) ---
+# --- 3. TELA: CADASTRO (FIX TOTAL: LISTAGEM SEQUENCIAL À PROVA DE FALHAS) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    with st.form("form_dados_anamnese_completo"):
+    with st.form("form_dados_anamnese_completo", clear_on_submit=False):
         st.subheader("📌 Escolha de Dias e Horários de Treino")
         c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
         with c_dia1: d_seg = st.checkbox("SEG")
@@ -484,22 +484,19 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        st.subheader("2. Anamnese: Queixas Principais e Sintomas")
+        st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
+        st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
         
-        # Grid explícito para os 9 tratamentos/queixas voltarem a renderizar perfeitamente
-        col_q1, col_q2, col_q3 = st.columns(3)
-        with col_q1:
-            t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="chk_cad_lombar")
-            t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="chk_cad_cervical")
-            t_gestante = st.checkbox("Pilates para Gestantes", key="chk_cad_gestante")
-        with col_q2:
-            t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="chk_cad_hernia")
-            t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="chk_cad_joelhos")
-            t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="chk_cad_idoso")
-        with col_q3:
-            t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="chk_cad_ombros")
-            t_postural = st.checkbox("Melhoria Postural Operacional", key="chk_cad_postural")
-            t_condic = st.checkbox("Condicionamento Físico Geral", key="chk_cad_condic")
+        # Rendereização sequencial sem colunas para forçar o Streamlit a desenhar todos na tela
+        t_lombar = st.checkbox("🔳 Dor Lombar (Lombalgia)", key="k_lombar")
+        t_cervical = st.checkbox("🔳 Dor Cervical (Cervicalgia)", key="k_cervical")
+        t_gestante = st.checkbox("🔳 Pilates para Gestantes", key="k_gestante")
+        t_hernia = st.checkbox("🔳 Hérnia de Disco / Protrusão", key="k_hernia")
+        t_joelhos = st.checkbox("🔳 Dor / Lesão nos Joelhos", key="k_joelhos")
+        t_idoso = st.checkbox("🔳 Pilates para Terceira Idade (Idosos)", key="k_idoso")
+        t_ombros = st.checkbox("🔳 Dor / Lesão nos Ombros", key="k_ombros")
+        t_postural = st.checkbox("🔳 Melhoria Postural Operacional", key="k_postural")
+        t_condic = st.checkbox("🔳 Condicionamento Físico Geral", key="k_condic")
             
         queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
