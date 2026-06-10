@@ -67,7 +67,7 @@ st.markdown("""
             padding: 8px;
             border: 1px solid #ddd;
             color: #000000 !important;
-        </tr>
+        }
         @media print {
             [data-testid="stSidebar"], .stHeader, footer, .no-print, button, .stMarkdownCmds {
                 display: none !important;
@@ -425,141 +425,129 @@ elif menu == "👥 Alunos":
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("🎉 Alterações cadastrais e clínicas salvas com sucesso!")
                 st.cache_data.clear()
-                st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("❌ Aluno arquivado!")
                 st.cache_data.clear()
-                st.rerun()
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
-# --- 3. TELA: CADASTRO (FIX TOTAL: PREVENÇÃO DE LOOPING E EXIBIÇÃO GARANTIDA) ---
+# --- 3. TELA: CADASTRO (SOLUÇÃO DEFINITIVA SEM ST.RERUN) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
-    # Sistema de feedback estável usando Session State para contornar o bug do rerun()
-    if "cadastro_sucesso" in st.session_state and st.session_state["cadastro_sucesso"]:
-        st.success(f"🎉 Aluno cadastrado com sucesso no banco de dados!")
-        if st.button("Cadastrar outro aluno"):
-            st.session_state["cadastro_sucesso"] = False
-            st.rerun()
-    else:
-        with st.form("form_dados_anamnese_completo", clear_on_submit=True):
-            st.subheader("📌 Escolha de Dias e Horários de Treino")
-            c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
-            with c_dia1: d_seg = st.checkbox("SEG")
-            with c_dia2: d_ter = st.checkbox("TER")
-            with c_dia3: d_qua = st.checkbox("QUA")
-            with c_dia4: d_qui = st.checkbox("QUI")
-            with c_dia5: d_sex = st.checkbox("SEX")
-            with c_dia6: d_sab = st.checkbox("SAB")
-            
-            lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
-            st.markdown("**Horários Disponíveis (Selecione um ou mais):**")
-            cols_horarios = st.columns(6)
-            horarios_selecionados = []
-            for index, hora_item in enumerate(lista_horarios_disponiveis):
-                with cols_horarios[index % 6]:
-                    if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
-                        horarios_selecionados.append(hora_item)
+    with st.form("form_dados_anamnese_completo", clear_on_submit=True):
+        st.subheader("📌 Escolha de Dias e Horários de Treino")
+        c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
+        with c_dia1: d_seg = st.checkbox("SEG")
+        with c_dia2: d_ter = st.checkbox("TER")
+        with c_dia3: d_qua = st.checkbox("QUA")
+        with c_dia4: d_qui = st.checkbox("QUI")
+        with c_dia5: d_sex = st.checkbox("SEX")
+        with c_dia6: d_sab = st.checkbox("SAB")
+        
+        lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
+        st.markdown("**Horários Disponíveis (Selecione um ou mais):**")
+        cols_horarios = st.columns(6)
+        horarios_selecionados = []
+        for index, hora_item in enumerate(lista_horarios_disponiveis):
+            with cols_horarios[index % 6]:
+                if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
+                    horarios_selecionados.append(hora_item)
 
-            st.subheader("1. Dados Pessoais e de Contrato")
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
-            with col_p2:
-                valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(dict_precos_padrao.get(plano_c, 220.0)))
+        st.subheader("1. Dados Pessoais e de Contrato")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+        with col_p2:
+            valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(dict_precos_padrao.get(plano_c, 220.0)))
 
-            nome_c = st.text_input("Nome Completo:")
-            col_id1, col_id2 = st.columns(2)
-            with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
-            with col_id2: cpf_c = st.text_input("CPF:")
+        nome_c = st.text_input("Nome Completo:")
+        col_id1, col_id2 = st.columns(2)
+        with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
+        with col_id2: cpf_c = st.text_input("CPF:")
+        
+        col_end1, col_end2, col_end3 = st.columns([1, 2, 1])
+        with col_end1: bairro_c = st.text_input("Bairro:")
+        with col_end2: endereco_base = st.text_input("Endereço (Rua, Número):")
+        with col_end3: complemento_c = st.text_input("Complemento:")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            genero_c = st.selectbox("Gênero:", ["Masculino", "Feminino", "Outro"])
+            nasc_c = st.text_input("Data de Nascimento (DD/MM/AAAA):")
+        with col2:
+            venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
+            inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-            col_end1, col_end2, col_end3 = st.columns([1, 2, 1])
-            with col_end1: bairro_c = st.text_input("Bairro:")
-            with col_end2: endereco_base = st.text_input("Endereço (Rua, Número):")
-            with col_end3: complemento_c = st.text_input("Complemento:")
+        st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
+        st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
+        
+        t_lombar = st.checkbox("🔳 Dor Lombar (Lombalgia)", key="k_lombar")
+        t_cervical = st.checkbox("🔳 Dor Cervical (Cervicalgia)", key="k_cervical")
+        t_gestante = st.checkbox("🔳 Pilates para Gestantes", key="k_gestante")
+        t_hernia = st.checkbox("🔳 Hérnia de Disco / Protrusão", key="k_hernia")
+        t_joelhos = st.checkbox("🔳 Dor / Lesão nos Joelhos", key="k_joelhos")
+        t_idoso = st.checkbox("🔳 Pilates para Terceira Idade (Idosos)", key="k_idoso")
+        t_ombros = st.checkbox("🔳 Dor / Lesão nos Ombros", key="k_ombros")
+        t_postural = st.checkbox("🔳 Melhoria Postural Operacional", key="k_postural")
+        t_condic = st.checkbox("🔳 Condicionamento Físico Geral", key="k_condic")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                genero_c = st.selectbox("Gênero:", ["Masculino", "Feminino", "Outro"])
-                nasc_c = st.text_input("Data de Nascimento (DD/MM/AAAA):")
-            with col2:
-                venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
-                inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
-                
-            st.subheader("2. Anamnese: Tratamentos de Pilates / Queixas do Aluno")
-            st.write("Marque abaixo todas as condições clínicas e objetivos aplicáveis a este aluno:")
-            
-            # Listagem limpa e direta para forçar a renderização visual estável
-            t_lombar = st.checkbox("🔳 Dor Lombar (Lombalgia)", key="k_lombar")
-            t_cervical = st.checkbox("🔳 Dor Cervical (Cervicalgia)", key="k_cervical")
-            t_gestante = st.checkbox("🔳 Pilates para Gestantes", key="k_gestante")
-            t_hernia = st.checkbox("🔳 Hérnia de Disco / Protrusão", key="k_hernia")
-            t_joelhos = st.checkbox("🔳 Dor / Lesão nos Joelhos", key="k_joelhos")
-            t_idoso = st.checkbox("🔳 Pilates para Terceira Idade (Idosos)", key="k_idoso")
-            t_ombros = st.checkbox("🔳 Dor / Lesão nos Ombros", key="k_ombros")
-            t_postural = st.checkbox("🔳 Melhoria Postural Operacional", key="k_postural")
-            t_condic = st.checkbox("🔳 Condicionamento Físico Geral", key="k_condic")
-                
-            queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
-            conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
+        queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
-            btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
-            
-            if btn_enviar:
-                dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
-                dias_c = "/".join(dias_lista)
-                horario_c = ", ".join(horarios_selecionados)
+        btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
+        
+        # O processamento ocorre de forma puramente linear sem st.rerun() para não prender o gatilho de execução
+        if btn_enviar:
+            dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
+            dias_c = "/".join(dias_lista)
+            horario_c = ", ".join(horarios_selecionados)
 
-                if not dias_c or not horario_c:
-                    st.error("❌ Selecione pelo menos um Dia e Horário!")
-                elif not nome_c or not tel_c:
-                    st.error("❌ Preencha o Nome e o WhatsApp!")
+            if not dias_c or not horario_c:
+                st.error("❌ Selecione pelo menos um Dia e Horário!")
+            elif not nome_c or not tel_c:
+                st.error("❌ Preencha o Nome e o WhatsApp!")
+            else:
+                conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
+                if conflitos:
+                    for dia_lotado, hora_lotada, qtd in conflitos:
+                        st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
                 else:
-                    conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
-                    if conflitos:
-                        for dia_lotado, hora_lotada, qtd in conflitos:
-                            st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
-                    else:
-                        tratamentos = []
-                        mapeamento_cadastro = [
-                            ("Dor Lombar (Lombalgia)", t_lombar),
-                            ("Hérnia de Disco / Protrusão", t_hernia),
-                            ("Dor / Lesão nos Ombros", t_ombros),
-                            ("Dor Cervical (Cervicalgia)", t_cervical),
-                            ("Dor / Lesão nos Joelhos", t_joelhos),
-                            ("Melhoria Postural Operacional", t_postural),
-                            ("Pilates para Gestantes", t_gestante),
-                            ("Pilates para Terceira Idade (Idosos)", t_idoso),
-                            ("Condicionamento Físico Geral", t_condic)
-                        ]
-                        
-                        for nome_queixa, marcado in mapeamento_cadastro:
-                            if marcado:
-                                tratamentos.append(nome_queixa)
-                                
-                        if queixa_extra.strip(): 
-                            tratamentos.append(queixa_extra.strip())
-                        
-                        nova_linha = {
-                            "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
-                            "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                            "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
-                            "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
-                            "Endereco": f"{endereco_base} {complemento_c}".strip()
-                        }
-                        
-                        df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                        conn.update(worksheet="alunos", data=df_alunos)
-                        st.cache_data.clear()
-                        
-                        # Ativa o estado de sucesso em vez de rodar rerun imediato com cache quebrado
-                        st.session_state["cadastro_sucesso"] = True
-                        st.rerun()
+                    tratamentos = []
+                    mapeamento_cadastro = [
+                        ("Dor Lombar (Lombalgia)", t_lombar),
+                        ("Hérnia de Disco / Protrusão", t_hernia),
+                        ("Dor / Lesão nos Ombros", t_ombros),
+                        ("Dor Cervical (Cervicalgia)", t_cervical),
+                        ("Dor / Lesão nos Joelhos", t_joelhos),
+                        ("Melhoria Postural Operacional", t_postural),
+                        ("Pilates para Gestantes", t_gestante),
+                        ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                        ("Condicionamento Físico Geral", t_condic)
+                    ]
+                    
+                    for nome_queixa, marcado in mapeamento_cadastro:
+                        if marcado:
+                            tratamentos.append(nome_queixa)
+                            
+                    if queixa_extra.strip(): 
+                        tratamentos.append(queixa_extra.strip())
+                    
+                    nova_linha = {
+                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
+                        "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
+                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
+                        "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
+                        "Endereco": f"{endereco_base} {complemento_c}".strip()
+                    }
+                    
+                    df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
+                    conn.update(worksheet="alunos", data=df_alunos)
+                    st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
+                    st.cache_data.clear()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
@@ -640,10 +628,8 @@ elif menu == "💰 Financeiro":
                     st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso no Google Sheets!")
                     df_financeiro = df_financeiro_novo
                     st.cache_data.clear()
-                    st.rerun()
                 except Exception as api_err:
                     st.error("🛑 Erro de Gravação na Planilha!")
-                    st.warning("Verifique se a aba na sua planilha do Google Sheets se chama exatamente **financeiro** (tudo minúsculo) e se a conta do sistema possui permissão de Editor.")
                     st.info(f"Detalhe técnico do erro: {api_err}")
                 
     st.markdown("---")
