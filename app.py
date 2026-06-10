@@ -351,21 +351,56 @@ elif menu == "👥 Alunos":
                 btn_salvar_alt = st.button("💾 Gravar Alterações", disabled=bloqueio_edicao)
                 btn_inativar_alt = st.button("❌ Mover ao Arquivo Morto")
             
+            # --- NOVA FUNCIONALIDADE ADICIONADA: Edição de Queixas/Tratamentos Clínicos ---
+            st.markdown("#### 🩺 Atualizar Anamnese: Objetivos e Tratamentos")
+            queixa_atual_str = str(dados_atuais.get("Queixa", ""))
+            
+            c_ch1, c_ch2, c_ch3 = st.columns(3)
+            with c_ch1:
+                ed_t_reab = st.checkbox("Pilates Clínico / Reabilitação", value=("Reabilitação" in queixa_atual_str))
+                ed_t_coluna = st.checkbox("Patologias da Coluna (Hérnias/Escoliose)", value=("Patologias Coluna" in queixa_atual_str))
+            with c_ch2:
+                ed_t_cond = st.checkbox("Condicionamento Físico Geral", value=("Condicionamento" in queixa_atual_str))
+                ed_t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", value=("Idosos" in queixa_atual_str))
+            with c_ch3:
+                ed_t_gest = st.checkbox("Pilates para Gestantes", value=("Gestantes" in queixa_atual_str))
+                ed_t_postura = st.checkbox("Melhoria Postural Operacional / Dores", value=("Postural" in queixa_atual_str))
+            
+            # Captura termos extras que não batem com as palavras-chave mapeadas acima
+            termos_limpos = []
+            for t in queixa_atual_str.split(" | "):
+                t_strip = t.strip()
+                if t_strip and t_strip not in ["Reabilitação", "Patologias Coluna", "Condicionamento", "Idosos", "Gestantes", "Postural"]:
+                    termos_limpos.append(t_strip)
+            queixas_adicionais_existentes = " | ".join(termos_limpos)
+            
+            ed_queixa_extra = st.text_input("Outras Patologias / Observações Clínicas Adicionais:", value=queixas_adicionais_existentes)
+            ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=str(dados_atuais.get("Conduta", "")))
+            
             if btn_salvar_alt and not bloqueio_edicao:
+                # Processar novos itens selecionados
+                novos_tratamentos = [t for t, m in [("Reabilitação", ed_t_reab), ("Patologias Coluna", ed_t_coluna), ("Condicionamento", ed_t_cond), ("Idosos", ed_t_idoso), ("Gestantes", ed_t_gest), ("Postural", ed_t_postura)] if m]
+                if ed_queixa_extra.strip(): 
+                    novos_tratamentos.append(ed_queixa_extra.strip())
+                
                 df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
                 df_alunos.at[idx_real_planilha, "Valor"] = float(novo_valor)  
                 df_alunos.at[idx_real_planilha, "Dias"] = novos_dias
                 df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
+                df_alunos.at[idx_real_planilha, "Queixa"] = " | ".join(novos_tratamentos)
+                df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra
                 
                 conn.update(worksheet="alunos", data=df_alunos)
-                st.success("🎉 Alterações salvas!")
+                st.success("🎉 Alterações cadastrais e clínicas salvas com sucesso!")
                 st.cache_data.clear()
+                st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("❌ Aluno arquivado!")
                 st.cache_data.clear()
+                st.rerun()
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
@@ -417,7 +452,6 @@ elif menu == "📝 Cadastro":
             venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
-        # PONTO 2 CORRIGIDO: Volta das modalidades e tratamentos principais de Pilates nos Checkboxes
         st.subheader("2. Anamnese: Objetivos e Tratamentos de Pilates")
         c_t1, c_t2, c_t3 = st.columns(3)
         with c_t1:
@@ -468,11 +502,10 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     
     lista_nomes_alunos = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
     
-    # PONTO 1 CORRIGIDO: Adicionado clear_on_submit=True para limpar a caixa após salvar
     with st.form("form_nova_evolucao", clear_on_submit=True):
         nome_aluno_evol = st.selectbox("Selecione o Aluno:", lista_nomes_alunos)
         texto_evol = st.text_area("Registro de Evolução/Conduta do dia:")
@@ -569,7 +602,6 @@ elif menu == "👤 Perfil":
         cg1, cg2 = st.columns(2)
         
         with cg1:
-            # PONTO 3 CORRIGIDO: Volta do Gráfico por Faixa Etária
             st.markdown("#### Distribuição dos Alunos por Faixa Etária")
             df_ativos_graficos["Idade"] = df_ativos_graficos["Nascimento"].apply(calcular_idade)
             
@@ -592,7 +624,6 @@ elif menu == "👤 Perfil":
                 st.info("Cadastre datas de nascimento válidas para ver o gráfico de idades.")
                 
         with cg2:
-            # PONTO 3 CORRIGIDO: Volta do Gráfico de Previsão de Recebimento distribuído no mês
             st.markdown("#### Previsão de Recebimento Mensal (Por Dia de Vencimento)")
             if "Vencimento" in df_ativos_graficos.columns and "Valor" in df_ativos_graficos.columns:
                 df_ativos_graficos["Valor_Float"] = df_ativos_graficos["Valor"].apply(converter_para_float)
@@ -608,7 +639,6 @@ elif menu == "👤 Perfil":
             else:
                 st.info("Dados insuficientes para calcular previsões financeiras.")
                 
-        # Segunda linha de gráficos (Planos e Gênero)
         cg3, cg4 = st.columns(2)
         with cg3:
             st.markdown("#### Alunos por Tipo de Plano")
