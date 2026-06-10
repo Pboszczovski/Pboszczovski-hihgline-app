@@ -32,7 +32,7 @@ st.markdown("""
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 10px 0px 20px 0px;
+            padding: 10px 0px 10px 0px;
         }
         .prontuario-card {
             background-color: #ffffff !important;
@@ -224,12 +224,17 @@ def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None)
     return conflitos, []
 
 # ==========================================
-# 3. BARRA LATERAL - LOGO E MENU
+# 3. BARRA LATERAL - LOGO LOCAL E MENU
 # ==========================================
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center; margin-bottom: 20px; font-size: 45px;'>🏋️‍♂️</h1>", unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center; color: white; margin-top: -20px; font-family: sans-serif; letter-spacing: 1px;'>Highline</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #FFD700; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px;'>Management</p>", unsafe_allow_html=True)
+    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+    if os.path.exists("Highline Logo.png"):
+        st.image("Highline Logo.png", use_container_width=True)
+    else:
+        st.markdown("<h1 style='text-align: center; margin-bottom: 20px; font-size: 45px;'>🏋️‍♂️</h1>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: white; margin-top: -20px; font-family: sans-serif; letter-spacing: 1px;'>Highline</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #FFD700; font-size: 12px; text-transform: uppercase; letter-spacing: 2px;'>Management</p>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
         
     st.markdown("🔒 **Menu de Navegação**")
     
@@ -404,7 +409,7 @@ elif menu == "👥 Alunos":
             ed_queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:", value=queixas_adicionais_existentes)
             
             conduta_atual = str(dados_atuais.get("Conduta", ""))
-            if conduta_atual.lower() == "nan":
+            if conduta_atual.lower() == "nan" or conduta_atual.strip() == "":
                 conduta_atual = ""
             ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=conduta_atual)
             
@@ -642,7 +647,6 @@ elif menu == "💰 Financeiro":
                     "Status": "PAGO"
                 }
                 
-                # Alinhamento correto com as colunas da planilha do Sheets
                 df_financeiro = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
                 
                 try:
@@ -783,7 +787,10 @@ elif menu == "🖨️ Imprimir Prontuário":
             else:
                 html_evolucoes = "<p style='color: #777; font-style: italic;'>Nenhum histórico clínico lançado para este aluno.</p>"
             
-            # Correção crítica: renderizando como bloco HTML estruturado correto
+            conduta_doc = dados.get('Conduta', '')
+            if pd.isna(conduta_doc) or str(conduta_doc).lower().strip() == 'nan' or str(conduta_doc).strip() == '':
+                conduta_doc = 'Sem restrições ou condutas excepcionais mapeadas.'
+
             st.write(f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
@@ -814,7 +821,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                 <div class="prontuario-secao">📌 HISTÓRICO DE QUEIXAS E SINTOMAS (ANAMNESE)</div>
                 <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Queixa', 'Nenhuma queixa inicial registrada.')}</p>
                 <div class="prontuario-secao">🎯 DIRETRIZES TÉCNICAS E RESTRIÇÕES DE CONDUTA</div>
-                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{dados.get('Conduta', 'Sem restrições ou condutas excepcionais mapeadas.')}</p>
+                <p style="margin: 10px 0; line-height: 1.5; font-size:14px; color:#000000;">{conduta_doc}</p>
                 <div class="prontuario-secao">📈 REGISTROS DE EVOLUÇÕES CLÍNICAS</div>
                 <div style="background-color:#fafafa; padding:12px; border-radius:4px; border:1px solid #eee; margin-top:10px; font-size:13px; max-height: 400px; overflow-y: auto;">
                     {html_evolucoes}
