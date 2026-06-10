@@ -436,7 +436,7 @@ elif menu == "👥 Alunos":
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
-# --- 3. TELA: CADASTRO ---
+# --- 3. TELA: CADASTRO (MÓDULO DE CHECKBOXES TOTALMENTE RECONSTRUÍDO E VISÍVEL) ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Anamnese Estruturada")
     
@@ -485,21 +485,23 @@ elif menu == "📝 Cadastro":
             inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
             
         st.subheader("2. Anamnese: Queixas Principais e Sintomas")
-        c_t1, c_t2, c_t3 = st.columns(3)
-        with c_t1:
-            t_lombar = st.checkbox("Dor Lombar (Lombalgia)")
-            t_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
-            t_gestante = st.checkbox("Pilates para Gestantes")
-        with c_t2:
-            t_hernia = st.checkbox("Hérnia de Disco / Protrusão")
-            t_joelhos = st.checkbox("Dor / Lesão nos Joelhos")
-            t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)")
-        with c_t3:
-            t_ombros = st.checkbox("Dor / Lesão nos Ombros")
-            t_postural = st.checkbox("Melhoria Postural Operacional")
-            t_condic = st.checkbox("Condicionamento Físico Geral")
+        
+        # Grid explícito para os 9 tratamentos/queixas voltarem a renderizar perfeitamente
+        col_q1, col_q2, col_q3 = st.columns(3)
+        with col_q1:
+            t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="chk_cad_lombar")
+            t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="chk_cad_cervical")
+            t_gestante = st.checkbox("Pilates para Gestantes", key="chk_cad_gestante")
+        with col_q2:
+            t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="chk_cad_hernia")
+            t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="chk_cad_joelhos")
+            t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="chk_cad_idoso")
+        with col_q3:
+            t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="chk_cad_ombros")
+            t_postural = st.checkbox("Melhoria Postural Operacional", key="chk_cad_postural")
+            t_condic = st.checkbox("Condicionamento Físico Geral", key="chk_cad_condic")
             
-        queixa_extra = st.text_input("Outras Queixas Adicionais:")
+        queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
         conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
@@ -551,6 +553,7 @@ elif menu == "📝 Cadastro":
                     conn.update(worksheet="alunos", data=df_alunos)
                     st.success(f"🎉 {nome_c} cadastrado com sucesso!")
                     st.cache_data.clear()
+                    st.rerun()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
@@ -600,7 +603,7 @@ elif menu == "⏳ Espera":
             st.success("✅ Adicionado!")
             st.cache_data.clear()
 
-# --- 6. TELA: FINANCEIRO (ATUALIZADA) ---
+# --- 6. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel Financeiro")
     total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum() if not df_financeiro.empty else 0.0
@@ -626,7 +629,6 @@ elif menu == "💰 Financeiro":
                 nova_baixa = {"Aluno": nome_f, "Valor": float(val_baixa_input), "Data": datetime.now().strftime("%d/%m/%Y"), "Forma": "PIX", "Categoria": "Mensalidade", "Status": "PAGO"}
                 df_financeiro_novo = pd.concat([df_financeiro, pd.DataFrame([nova_baixa])], ignore_index=True)
                 
-                # Try/Except estruturado para capturar erros de gravação na API sem quebrar a tela
                 try:
                     conn.update(worksheet="financeiro", data=df_financeiro_novo)
                     st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso no Google Sheets!")
