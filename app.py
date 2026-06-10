@@ -339,7 +339,7 @@ elif menu == "👥 Alunos":
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
             bloqueio_edicao = False
-            if novos_dias and? novo_horario:
+            if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
