@@ -5,7 +5,7 @@ from datetime import datetime
 import os
 
 # ==============================================================================
-# 1. CONFIGURAÇÕES VISUAIS, IDENTIDADE VISUAL E COMPORTAMENTO DE IMPRESSÃO
+# 1. CONFIGURAÇÕES VISUAIS E IDENTIDADE VISUAL
 # ==============================================================================
 st.set_page_config(page_title="Highline Management System", layout="wide", page_icon="🏋️‍♂️")
 
@@ -74,6 +74,8 @@ def limpar_dataframe(df):
     try:
         df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
         df.columns = df.columns.str.strip()
+        # Tratamento rigoroso de NaNs para evitar quebras na API do Google Sheets
+        df = df.fillna("")
         return df.dropna(how="all")
     except:
         return pd.DataFrame()
@@ -158,33 +160,6 @@ if not df_precos.empty and "Plano" in df_precos.columns and "Valor" in df_precos
     for _, r in df_precos.iterrows():
         dict_precos[str(r["Plano"]).strip()] = converter_para_float(r["Valor"])
 
-# ==============================================================================
-# 4. BARRA LATERAL E CONTROLO DE SESSÃO
-# ==============================================================================
-with st.sidebar:
-    if os.path.exists("Highline Logo.png"):
-        st.image("Highline Logo.png", use_container_width=True)
-    else:
-        st.markdown("<h2 style='text-align: center; color: white;'>📌 HIGHLINE</h2>", unsafe_allow_html=True)
-    
-    menu = st.radio("🔒 Menu de Navegação", [
-        "📅 Agenda", 
-        "👥 Alunos", 
-        "📝 Cadastro", 
-        "📈 Evolução", 
-        "⏳ Espera", 
-        "💰 Financeiro", 
-        "👤 Perfil", 
-        "⚙️ Preços", 
-        "📁 Arquivo Morto",
-        "🖨️ Imprimir Prontuário"
-    ])
-    st.markdown("---")
-    if conexao_ok: 
-        st.success("🟢 Banco de Dados Online")
-    else: 
-        st.error("🔴 Banco de Dados Offline")
-
 LISTA_QUEIXAS_PADRAO = [
     "Dor Lombar (Lombalgia)", "Hérnia de Disco / Protrusão", "Dor / Lesão nos Ombros", 
     "Dor Cervical (Cervicalgia)", "Dor / Lesão nos Joelhos", "Melhoria Postural Operacional", 
@@ -192,7 +167,7 @@ LISTA_QUEIXAS_PADRAO = [
 ]
 
 # ==============================================================================
-# 5. EXECUÇÃO INTEGRAL DAS TELAS DO SISTEMA
+# 4. EXECUÇÃO INTEGRAL DAS TELAS DO SISTEMA
 # ==============================================================================
 
 # --- TELA: AGENDA DE TREINOS ---
@@ -203,9 +178,8 @@ if menu == "📅 Agenda":
     if not df_alunos.empty and "Nascimento" in df_alunos.columns:
         niver = []
         for _, r in df_alunos.iterrows():
-            if pd.notna(r["Nascimento"]):
+            if pd.notna(r["Nascimento"]) and str(r["Nascimento"]).strip() != "":
                 try:
-                    # Correção: Força verificação comparando Dia e Mês independente do ano
                     val_nasc = str(r["Nascimento"]).strip()
                     if "/" in val_nasc:
                         partes = val_nasc.split("/")
@@ -241,7 +215,7 @@ if menu == "📅 Agenda":
     else:
         st.info("Nenhum aluno ativo mapeado para o dia de hoje.")
 
-# --- TELA: BASE DE ALUNOS ATIVOS ---
+# --- TELA: GERENCIAMENTO DE ALUNOS ---
 elif menu == "👥 Alunos":
     st.title("👥 Alteração Rápida e Gerenciamento de Alunos")
     
@@ -271,7 +245,6 @@ elif menu == "👥 Alunos":
                     lista_p = ["1x semana", "2x semana", "3x semana"]
                     idx_p = lista_p.index(plano_atual) if plano_atual in lista_p else 0
                     
-                    # Correção item 3: Removido input numérico de valor bruto. Atrelado diretamente ao plano.
                     novo_p = c1.selectbox("Novo Plano Contratado:", lista_p, index=idx_p)
                     novos_d = c2.text_input("Novos Dias de Aula (Ex: SEG/QUA/SEX):", value=str(dados.get("Dias", "")))
                     novo_h = c3.text_input("Novo Horário (Ex: 08:30):", value=str(dados.get("Horario", "")))
@@ -310,13 +283,15 @@ elif menu == "👥 Alunos":
                         if e_extra.strip(): queixas_novas.append(e_extra.strip())
                         
                         df_alunos.at[idx, "Plano"] = novo_p
-                        df_alunos.at[idx, "Valor"] = novo_val
+                        df_alunos.at[idx, "Valor"] = float(novo_val)
                         df_alunos.at[idx, "Dias"] = novos_d.upper()
                         df_alunos.at[idx, "Horario"] = novo_h
                         df_alunos.at[idx, "Queixa"] = " | ".join(queixas_novas)
                         df_alunos.at[idx, "Conduta"] = e_cond
                         
-                        conn.update(worksheet="alunos", data=df_alunos)
+                        # Sanitização absoluta antes de enviar ao gsheets para evitar APIError 400
+                        df_alunos_salvar = df_alunos.fillna("").astype(str)
+                        conn.update(worksheet="alunos", data=df_alunos_salvar)
                         st.success("Cadastro atualizado com sucesso!")
                         st.cache_data.clear()
                         st.rerun()
@@ -330,24 +305,25 @@ elif menu == "👥 Alunos":
                         else:
                             df_arquivo_morto = pd.concat([df_arquivo_morto, row_arquivada], ignore_index=True)
                         
-                        conn.update(worksheet="alunos", data=df_alunos)
-                        conn.update(worksheet="arquivo_morto", data=df_arquivo_morto)
+                        df_alunos_salvar = df_alunos.fillna("").astype(str)
+                        df_morto_salvar = df_arquivo_morto.fillna("").astype(str)
+                        
+                        conn.update(worksheet="alunos", data=df_alunos_salvar)
+                        conn.update(worksheet="arquivo_morto", data=df_morto_salvar)
                         st.warning("Aluno movido para o arquivo morto com sucesso.")
                         st.cache_data.clear()
                         st.rerun()
         else:
             st.info("Nenhum aluno ativo encontrado.")
     else:
-        st.error("A tabela de alunos está vazia ou ilegível.")
+        st.error("A tabela de alunos está vazia ou inacessível.")
 
-# --- TELA: CADASTRO E DISPONIBILIDADE EM MULTI-CHECKBOX ---
+# --- TELA: CADASTRO E DISPONIBILIDADE ---
 elif menu == "📝 Cadastro":
     st.title("📝 Cadastro e Verificação de Vagas Dinâmica")
-    
     st.markdown("### 🔍 Passo 1: Seleção de Dias e Horários (Limite: Máx 3 por Vaga)")
     horario_teste = st.text_input("Digite o Horário Desejado (Ex: 08:30):", value="08:30")
     
-    # Correção item 2: Retornando à seleção múltipla por checkboxes independentes
     st.write("Selecione os dias da semana pretendidos:")
     chx1, chx2, chx3, chx4, chx5, chx6 = st.columns(6)
     d_seg = chx1.checkbox("SEG")
@@ -436,7 +412,8 @@ elif menu == "📝 Cadastro":
                     }
                     
                     df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                    conn.update(worksheet="alunos", data=df_alunos)
+                    df_alunos_salvar = df_alunos.fillna("").astype(str)
+                    conn.update(worksheet="alunos", data=df_alunos_salvar)
                     st.success("Aluno cadastrado com sucesso!")
                     st.cache_data.clear()
                     st.rerun()
@@ -456,7 +433,8 @@ elif menu == "📈 Evolução":
             else:
                 nova_ev = {"Data": datetime.now().strftime("%d/%m/%Y"), "Nome do Aluno": aluno_sel, "Evolução": texto_evolucao.strip()}
                 df_evolucoes = pd.concat([df_evolucoes, pd.DataFrame([nova_ev])], ignore_index=True)
-                conn.update(worksheet="evolucao", data=df_evolucoes)
+                df_evolucoes_salvar = df_evolucoes.fillna("").astype(str)
+                conn.update(worksheet="evolucao", data=df_evolucoes_salvar)
                 st.success("Evolução clínica gravada com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
@@ -468,8 +446,6 @@ elif menu == "📈 Evolução":
 # --- TELA: LISTA DE ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento de Lista de Espera")
-    
-    # Correção item 4: Exibindo estritamente Nome, Telefone, Dia e Hora de Preferência
     if not df_espera.empty:
         cols_espera = [c for c in ["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"] if c in df_espera.columns]
         st.dataframe(df_espera[cols_espera] if cols_espera else df_espera, use_container_width=True, hide_index=True)
@@ -489,21 +465,19 @@ elif menu == "⏳ Espera":
             else:
                 nova_espera = {"Nome": n_esp.strip(), "Telefone": t_esp.strip(), "Dia Preferencia": d_esp.strip().upper(), "Hora Preferencia": h_esp.strip()}
                 df_espera = pd.concat([df_espera, pd.DataFrame([nova_espera])], ignore_index=True)
-                conn.update(worksheet="espera", data=df_espera)
+                df_espera_salvar = df_espera.fillna("").astype(str)
+                conn.update(worksheet="espera", data=df_espera_salvar)
                 st.success("Interessado adicionado com sucesso!")
                 st.cache_data.clear()
                 st.rerun()
 
-# --- TELA: FINANCEIRO COM CÁLCULO DE PREVISÃO ANTECIPADA ---
+# --- TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
     st.title("💰 Painel de Controlo Financeiro")
-    
-    # Valores Computados de Recebidos
     tot_recebido = 0.0
     if not df_financeiro.empty and "Status" in df_financeiro.columns:
         tot_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum()
         
-    # Correção item 6: Total Previsto / A Receber baseado na folha de ativos
     tot_previsto = 0.0
     if not df_alunos.empty:
         col_status = [c for c in df_alunos.columns if c.lower() == "status"]
@@ -524,8 +498,6 @@ elif menu == "💰 Financeiro":
         if lista_pagamento:
             st.markdown("### Registrar Baixa de Pagamento Manual")
             selecionado_pag = st.selectbox("Selecione o Aluno para dar baixa:", lista_pagamento)
-            
-            # Correção item 5: Permite que o Jonathan selecione a forma exata de recebimento
             forma_pago = st.radio("Selecione a Forma de Pagamento:", ["PIX", "Dinheiro"], horizontal=True)
             
             if st.button("Confirmar Recebimento"):
@@ -534,14 +506,13 @@ elif menu == "💰 Financeiro":
                 valor_pago = converter_para_float(aluno_row.get("Valor", 0.0))
                 
                 novo_lancamento = {
-                    "Aluno": nome_aluno,
-                    "Valor": valor_pago,
+                    "Aluno": nome_aluno, "Valor": valor_pago,
                     "Data": datetime.now().strftime("%d/%m/%Y"),
-                    "Forma": forma_pago,
-                    "Status": "PAGO"
+                    "Forma": forma_pago, "Status": "PAGO"
                 }
                 df_financeiro = pd.concat([df_financeiro, pd.DataFrame([novo_lancamento])], ignore_index=True)
-                conn.update(worksheet="financeiro", data=df_financeiro)
+                df_financeiro_salvar = df_financeiro.fillna("").astype(str)
+                conn.update(worksheet="financeiro", data=df_financeiro_salvar)
                 st.success(f"Pagamento em {forma_pago} de {nome_aluno} processado!")
                 st.cache_data.clear()
                 st.rerun()
@@ -552,7 +523,7 @@ elif menu == "💰 Financeiro":
         if "Valor" in df_fin_vis.columns: df_fin_vis["Valor"] = df_fin_vis["Valor"].apply(formatar_brl)
         st.dataframe(df_fin_vis.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
-# --- TELA: PERFIL E GRÁFICOS ANALÍTICOS (RESGATADOS) ---
+# --- TELA: PERFIL (CORREÇÃO DE GRÁFICOS) ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estratégicos Highline Studio")
     
@@ -569,25 +540,25 @@ elif menu == "👤 Perfil":
         if not df_espera.empty:
             c3.metric("Fila de Espera Atual", len(df_espera))
             
-        # Correção item 7: Gráficos de análise de densidade resgatados
         st.markdown("### Distribuição Estratégica de Alunos por Plano")
-        if "Plano" in ativos.columns:
-            plano_counts = ativos["Plano"].value_counts()
-            st.bar_chart(plano_counts)
+        if "Plano" in ativos.columns and not ativos.empty:
+            df_plano = ativos["Plano"].value_counts().to_frame()
+            st.bar_chart(df_plano)
             
         st.markdown("### Concentração de Alunos por Dia de Aula")
-        if "Dias" in ativos.columns:
+        if "Dias" in ativos.columns and not ativos.empty:
             todos_dias = []
             for d_str in ativos["Dias"].dropna().astype(str):
-                for parte in d_str.replace("/", " ").split():
+                for parte in d_str.replace("/", " ").replace("-", " ").split():
                     if parte.strip() in ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"]:
                         todos_dias.append(parte.strip())
             if todos_dias:
-                st.bar_chart(pd.Series(todos_dias).value_counts())
+                df_dias_contagem = pd.Series(todos_dias).value_counts().to_frame()
+                st.bar_chart(df_dias_contagem)
     else:
-        st.info("Insira matrículas para consolidação dos gráficos analíticos.")
+        st.info("Insira matrículas ativas para consolidação dos gráficos analíticos.")
 
-# --- TELA: CONFIGURAÇÃO DE PREÇOS ---
+# --- TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Tabela Padrão de Preços dos Planos")
     with st.form("f_tabela_precos"):
@@ -600,33 +571,40 @@ elif menu == "⚙️ Preços":
                 {"Plano": "1x semana", "Valor": p1},
                 {"Plano": "2x semana", "Valor": p2},
                 {"Plano": "3x semana", "Valor": p3}
-            ])
+            ]).astype(str)
             conn.update(worksheet="precos", data=novos_precos_df)
             st.success("Tabela de preços base atualizada!")
             st.cache_data.clear()
             st.rerun()
 
-# --- TELA: ARQUIVO MORTO ---
+# --- TELA: ARQUIVO MORTO (ESTABILIZADO) ---
 elif menu == "📁 Arquivo Morto":
     st.title("📁 Alunos Inativos / Arquivo Morto")
     
-    # Correção item 8: Varredura dupla para garantir exibição de inativos históricos
     df_exibicao_morto = pd.DataFrame()
     if not df_arquivo_morto.empty:
         df_exibicao_morto = df_arquivo_morto.copy()
-    elif not df_alunos.empty:
+    
+    # Fallback caso os inativos históricos estejam na aba principal de alunos
+    if not df_alunos.empty:
         col_status = [c for c in df_alunos.columns if c.lower() == "status"]
         if col_status:
             inativos_base = df_alunos[df_alunos[col_status[0]].astype(str).str.upper() == "INATIVO"]
             if not inativos_base.empty:
-                df_exibicao_morto = inativos_base
-                
+                if df_exibicao_morto.empty:
+                    df_exibicao_morto = inativos_base
+                else:
+                    df_exibicao_morto = pd.concat([df_exibicao_morto, inativos_base], ignore_index=True).drop_duplicates(subset=["Nome"])
+
+    # Filtragem de valores vazios/nans visuais antes de renderizar a tabela
     if not df_exibicao_morto.empty:
+        df_exibicao_morto = df_exibicao_morto.fillna("")
+        df_exibicao_morto = df_exibicao_morto.replace("nan", "")
         st.dataframe(df_exibicao_morto, use_container_width=True, hide_index=True)
     else:
         st.info("Nenhum registro de aluno inativo encontrado no banco de dados.")
 
-# --- TELA: IMPRESSÃO DE PRONTUÁRIO CLÍNICO (CORREÇÃO DE COMPONENTE) ---
+# --- TELA: IMPRESSÃO DE PRONTUÁRIO (ESTABILIZADO) ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Visualização e Emissão de Prontuário Clínico")
     
@@ -639,12 +617,17 @@ elif menu == "🖨️ Imprimir Prontuário":
             idade = calcular_idade(row.get("Nascimento", ""))
             
             q_p = str(row.get('Queixa', ''))
-            q_html = "Nenhuma queixa registrada." if q_p.lower() == "nan" or not q_p.strip() else q_p.replace(' | ', '<br>● ')
+            if q_p.lower() == "nan" or not q_p.strip() or q_p == "":
+                q_html = "Nenhuma queixa registrada."
+            else:
+                q_html = q_p.replace(' | ', '<br>● ')
             
             c_p = str(row.get('Conduta', ''))
-            c_html = "Nenhuma conduta ou diretriz estipulada." if c_p.lower() == "nan" or not c_p.strip() else c_p
+            if c_p.lower() == "nan" or not c_p.strip() or c_p == "":
+                c_html = "Nenhuma conduta ou diretriz estipulada até o momento."
+            else:
+                c_html = c_p
 
-            # Construção estruturada da Ficha Clínica
             html_prontuario_final = f"""
             <html>
             <head>{ESTILO_PRONTUARIO_HTML}</head>
@@ -688,7 +671,6 @@ elif menu == "🖨️ Imprimir Prontuário":
             </html>
             """
             
-            # Correção item 9: Renderizador web component nativo isolado para sanar o erro visual de texto corrido
             st.components.v1.html(html_prontuario_final, height=650, scrolling=True)
             
             st.markdown("<br>", unsafe_allow_html=True)
