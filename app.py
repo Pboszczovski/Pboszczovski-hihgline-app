@@ -150,7 +150,7 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
+# 2. CONEXÃO COM GOOGLE SHEETS (COM CACHE)
 # ==========================================
 conexao_ok = False
 erro_msg = ""
@@ -170,20 +170,25 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=0))
-    except: pass
+    # Função interna para cachear leituras por 15 segundos e evitar o bloqueio do Google
+    @st.cache_data(ttl=15)
+    def ler_dados_planilha(aba):
+        return conn.read(worksheet=aba)
     
-    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro", ttl=0))
-    except: pass
+    try: df_alunos = limpiar_dataframe(ler_dados_planilha("alunos"))
+    except: df_alunos = pd.DataFrame()
     
-    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera", ttl=0))
-    except: pass
+    try: df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
+    except: df_financeiro = pd.DataFrame()
     
-    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos", ttl=0))
-    except: pass
+    try: df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
+    except: df_espera = pd.DataFrame()
     
-    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao", ttl=0))
-    except: pass
+    try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
+    except: df_precos = pd.DataFrame()
+    
+    try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
+    except: df_evolucoes = pd.DataFrame()
 
     if not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
@@ -358,7 +363,7 @@ elif menu == "👥 Alunos":
         
         df_ativos_visivel = df_ativos_tabela.copy()
         if "Valor" in df_ativos_visivel.columns:
-            df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
+            df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatb_brl) if 'formatb_brl' in globals() else df_ativos_visivel["Valor"].apply(formatar_brl)
         
         st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
 
@@ -389,7 +394,7 @@ elif menu == "👥 Alunos":
                     st.markdown("**Ações Disponíveis:**")
                     btn_salvar_alt = st.form_submit_button("💾 Gravar Alterações")
                 
-                st.markdown("#### #### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
+                st.markdown("#### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
                 queixa_atual_str = str(dados_atuais.get("Queixa", ""))
                 
                 c_ch1, c_ch2, c_ch3 = st.columns(3)
@@ -585,7 +590,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clinical dos Alunos")
+    st.title("📈 Evolução Clínica dos Alunos")
     
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
@@ -626,7 +631,7 @@ elif menu == "📈 Evolução":
             df_exibicao = df_evolucoes if aluno_filtro == "Todos" else df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
             st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
-# --- 5. TELA: ESPERA (CORRIGIDA COMPLETA E SEM ERRO DE SINTAXE) ---
+# --- 5. TELA: ESPERA ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
     
@@ -634,7 +639,7 @@ elif menu == "⏳ Espera":
         df_espera.columns = df_espera.columns.str.strip()
         df_espera_vis = df_espera.copy()
         
-        # Garante as 4 colunas essenciais sem erros de sintaxe
+        # Garante as colunas estruturadas perfeitamente para exibir dados antigos
         for col in ["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"]:
             if col not in df_espera_vis.columns:
                 df_espera_vis[col] = ""
