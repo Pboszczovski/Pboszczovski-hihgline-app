@@ -195,7 +195,6 @@ try:
 except Exception as e:
     erro_msg = str(e)
 
-# Garantia de preenchimento caso a planilha venha vazia
 if df_precos is None or df_precos.empty or "Plano" not in df_precos.columns:
     df_precos = pd.DataFrame([
         {"Plano": "1x semana", "Valor": 180.0},
@@ -584,27 +583,33 @@ elif menu == "📝 Cadastro":
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 4. TELA: EVOLUÇÃO (CORRIGIDA) ---
+# --- 4. TELA: EVOLUÇÃO (CORRIGIDA - REMOVIDO ELEMENTO DE RECARGA DE DENTRO DO FORM) ---
 elif menu == "📈 Evolução":
     st.title("📈 Evolução Clínica dos Alunos")
     
-    # CORREÇÃO 1: Garante listagem limpa de nomes de alunos para o seletor funcionar sem travar
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
         df_limpo_nomes = df_alunos.dropna(subset=["Nome"])
         lista_nomes_alunos = sorted([str(n).strip() for n in df_limpo_nomes["Nome"].unique() if str(n).strip() != ""])
     
     if lista_nomes_alunos:
-        with st.form("form_nova_evolucao", clear_on_submit=True):
-            nome_aluno_evol = st.selectbox("Selecione o Aluno para Evoluir:", lista_nomes_alunos)
+        # Colocamos os seletores fora do form para destravar totalmente a renderização e o clique do usuário
+        nome_aluno_evol = st.selectbox("Selecione o Aluno para Evoluir:", lista_nomes_alunos, key="sel_aluno_evol_direto")
+        data_registro = st.date_input("Data do Registro:", datetime.now(), key="date_evol_direto")
+        
+        with st.form("form_nova_evolucao_clean", clear_on_submit=True):
             texto_evol = st.text_area("Registro de Evolução/Conduta do dia:")
-            data_registro = st.date_input("Data do Registro:", datetime.now())
+            submit_evol = st.form_submit_button("Salvar Evolução")
             
-            if st.form_submit_button("Salvar Evolução"):
+            if submit_evol:
                 if not texto_evol.strip():
                     st.error("❌ Digite um texto descritivo para salvar.")
                 else:
-                    nova_evol = {"Data": data_registro.strftime("%d/%m/%Y"), "Nome do Aluno": nome_aluno_evol, "Evolução": texto_evol}
+                    nova_evol = {
+                        "Data": data_registro.strftime("%d/%m/%Y"), 
+                        "Nome do Aluno": nome_aluno_evol, 
+                        "Evolução": texto_evol.strip()
+                    }
                     df_evolucoes = pd.concat([df_evolucoes, pd.DataFrame([nova_evol])], ignore_index=True)
                     conn.update(worksheet="evolucao", data=df_evolucoes.fillna("").astype(str))
                     st.success("🎉 Evolução registrada com sucesso!")
@@ -695,7 +700,7 @@ elif menu == "💰 Financeiro":
         if "Valor" in df_fin_vis.columns: df_fin_vis["Valor"] = df_fin_vis["Valor"].apply(formatar_brl)
         st.dataframe(df_fin_vis.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
-# --- 7. TELA: PERFIL (CORRIGIDA) ---
+# --- 7. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estratégicos do Studio Highline")
     
@@ -713,7 +718,6 @@ elif menu == "👤 Perfil":
         g_col1, g_col2 = st.columns(2)
         
         with g_col1:
-            # 1. Gráfico por Gênero (Pizza)
             st.markdown("#### 📊 Perfil por Gênero")
             if "Genero" in ativos.columns and not ativos["Genero"].isna().all():
                 df_gen = ativos["Genero"].value_counts().reset_index()
@@ -723,7 +727,6 @@ elif menu == "👤 Perfil":
             else:
                 st.info("Dados de Gênero insuficientes.")
 
-            # 3. Gráfico por Plano (Pizza)
             st.markdown("#### 📦 Distribuição por Plano")
             if "Plano" in ativos.columns and not ativos["Plano"].isna().all():
                 df_plan = ativos["Plano"].value_counts().reset_index()
@@ -734,7 +737,6 @@ elif menu == "👤 Perfil":
                 st.info("Dados de Planos insuficientes.")
 
         with g_col2:
-            # 2. Gráfico de Faixa Etária (Barras)
             st.markdown("#### 🎂 Perfil por Faixa Etária")
             if "Nascimento" in ativos.columns:
                 ativos["Idade"] = ativos["Nascimento"].apply(calcular_idade)
@@ -753,13 +755,11 @@ elif menu == "👤 Perfil":
                 else:
                     st.info("Datas de nascimento não preenchidas ou inválidas.")
 
-            # CORREÇÃO 2: Gráfico de Barras com Escala Y por Número de Alunos e Valor no topo
             st.markdown("#### 📅 Distribuição de Valores a Receber (Por Vencimento)")
             if "Vencimento" in ativos.columns and "Valor" in ativos.columns:
                 ativos["Dia_Venc"] = ativos["Vencimento"].apply(lambda x: str(int(float(x))) if pd.notna(x) and str(x).strip() != "" else "10")
                 ativos["Valor_Float"] = ativos["Valor"].apply(converter_para_float)
                 
-                # Agrupamos calculando a Soma (valores no topo) e o Count (eixo Y)
                 df_proj = ativos.groupby("Dia_Venc").agg(
                     Total_Previsto=("Valor_Float", "sum"),
                     Qtd_Alunos=("Nome", "count")
@@ -768,12 +768,11 @@ elif menu == "👤 Perfil":
                 df_proj["Dia_Int"] = df_proj["Dia_Venc"].astype(int)
                 df_proj = df_proj.sort_values(by="Dia_Int")
                 
-                # Construção do gráfico de barras customizado
                 fig_proj = go.Figure(data=[
                     go.Bar(
                         x=df_proj["Dia_Venc"],
-                        y=df_proj["Qtd_Alunos"], # Eixo Y com a quantidade de alunos correspondente
-                        text=df_proj["Total_Previsto"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")), # Valor exibido no topo
+                        y=df_proj["Qtd_Alunos"],
+                        text=df_proj["Total_Previsto"].apply(lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")),
                         textposition='outside',
                         marker_color='#2E5A44'
                     )
@@ -791,15 +790,12 @@ elif menu == "👤 Perfil":
     else:
         st.info("Nenhum dado de aluno disponível para gerar indicadores.")
 
-# --- 8. TELA: PREÇOS (CARD LAYOUT COM AJUSTE +- INTEGRADO) ---
+# --- 8. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
     st.title("⚙️ Configuração de Preços Base")
     st.write("Ajuste os valores abaixo usando os botões de + ou -. As alterações se aplicam instantaneamente no sistema e sincronizam com a planilha.")
     
-    # Criamos os containers visuais em colunas organizadas
     col_card1, col_card2, col_card3 = st.columns(3)
-    
-    planos_obrigatorios = ["1x semana", "2x semana", "3x semana"]
     novos_valores_dict = {}
     
     with col_card1:
@@ -828,19 +824,15 @@ elif menu == "⚙️ Preços":
         st.cache_data.clear()
         st.rerun()
 
-# --- 9. TELA: ARQUIVO MORTO (CORRIGIDO) ---
+# --- 9. TELA: ARQUIVO MORTO ---
 elif menu == "📁 Arquivo Morto":
     st.title("📁 Arquivo Morto (Alunos Inativos)")
-    
     if not df_alunos.empty:
-        # CORREÇÃO 3: Limpeza completa de strings eliminando erros de filtragem invisíveis
         df_alunos["Status_Clean"] = df_alunos["Status"].astype(str).str.strip().str.upper()
         inativos = df_alunos[df_alunos["Status_Clean"] == "INATIVO"].copy()
-        
         if not inativos.empty:
             if "Valor" in inativos.columns:
                 inativos["Valor"] = inativos["Valor"].apply(formatar_brl)
-            # Removemos a coluna auxiliar antes de exibir
             inativos = inativos.drop(columns=["Status_Clean"], errors="ignore")
             st.dataframe(inativos, use_container_width=True, hide_index=True)
         else:
@@ -848,7 +840,7 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.warning("Nenhum registro encontrado na base de dados.")
 
-# --- 10. TELA: PRONTUÁRIO (CORRIGIDO) ---
+# --- 10. TELA: PRONTUÁRIO (CORRIGIDA - IMPEDINDO ERROS DE SINTAXE HTML POR CARACTERES ESPECIAIS) ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Prontuário Clínico para Impressão")
     
@@ -861,33 +853,42 @@ elif menu == "🖨️ Imprimir Prontuário":
             idade = calcular_idade(row.get("Nascimento", ""))
             
             q_p = str(row.get('Queixa', '')).replace(' | ', '<br>● ')
-            if not q_p.strip() or q_p.lower() == "nan": q_p = "Nenhuma queixa registrada."
+            if not q_p.strip() or q_p.lower() == "nan": 
+                q_p = "Nenhuma queixa registrada."
                 
             c_p = str(row.get('Conduta', ''))
-            if c_p.lower() == "nan" or not c_p.strip(): c_p = "Nenhuma diretriz de conduta específica cadastrada."
+            if c_p.lower() == "nan" or not c_p.strip(): 
+                c_p = "Nenhuma diretriz de conduta específica cadastrada."
             
+            nome_aluno = row.get('Nome', '-')
+            genero_aluno = row.get('Genero', '-')
+            nasc_aluno = row.get('Nascimento', '-')
+            idade_txt = f"{idade} anos" if idade else "-"
+            cpf_aluno = row.get('CPF', '-')
+            tel_aluno = row.get('Telefone', '-')
+            bairro_aluno = row.get('Bairro', '-')
+            
+            # Substituída interpolação antiga por f-string direta e limpa contra quebras
             html_prontuario_final = f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
-                    <h2>%s</h2>
+                    <h2>HIGHLINE STUDIO PILATES</h2>
                     <p>Ficha Clínico-Funcional & Anamnese</p>
                 </div>
                 <div class="prontuario-secao">1. DADOS IDENTIFICATÓRIOS DO ALUNO</div>
                 <table class="tabela-prontuario">
-                    <tr><td><strong>Nome Completo:</strong> %s</td><td><strong>Gênero:</strong> %s</td></tr>
-                    <tr><td><strong>Nascimento:</strong> %s (%s)</td><td><strong>CPF:</strong> %s</td></tr>
-                    <tr><td><strong>WhatsApp:</strong> %s</td><td><strong>Bairro:</strong> %s</td></tr>
+                    <tr><td><strong>Nome Completo:</strong> {nome_aluno}</td><td><strong>Gênero:</strong> {genero_aluno}</td></tr>
+                    <tr><td><strong>Nascimento:</strong> {nasc_aluno} ({idade_txt})</td><td><strong>CPF:</strong> {cpf_aluno}</td></tr>
+                    <tr><td><strong>WhatsApp:</strong> {tel_aluno}</td><td><strong>Bairro:</strong> {bairro_aluno}</td></tr>
                 </table>
                 <div class="prontuario-secao">2. QUEIXAS MAPEADAS</div>
-                <p style="color:black; padding-top:10px; font-size:14px; line-height:1.6;">● %s</p>
+                <p style="color:black; padding-top:10px; font-size:14px; line-height:1.6;">● {q_p}</p>
                 <div class="prontuario-secao">3. CONDUTA RECOMENDADA</div>
-                <p style="color:black; padding-top:10px; font-size:14px; line-height:1.6;">%s</p>
+                <p style="color:black; padding-top:10px; font-size:14px; line-height:1.6;">{c_p}</p>
             </div>
-            """ % ("HIGHLINE STUDIO PILATES", row.get('Nome', '-'), row.get('Genero', '-'), row.get('Nascimento', '-'), f"{idade} anos" if idade else "-", row.get('CPF', '-'), row.get('Telefone', '-'), row.get('Bairro', '-'), q_p, c_p)
+            """
             
-            # CORREÇÃO 4: Renderização garantida usando st.markdown com o HTML limpo injetado
             st.markdown(html_prontuario_final, unsafe_allow_html=True)
-            
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown('<button class="no-print" onclick="window.print()" style="padding:10px 20px; background-color:#2E5A44; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">🖨️ Executar Impressão Física / Salvar PDF</button>', unsafe_allow_html=True)
     else:
