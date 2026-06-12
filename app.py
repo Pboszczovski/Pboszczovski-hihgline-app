@@ -268,7 +268,7 @@ LISTA_QUEIXAS_PADRAO = [
     "Dor / Lesão nos Ombros",
     "Dor Cervical (Cervicalgia)",
     "Dor / Lesão nos Joelhos",
-    "Melioria Postural Operacional",
+    "Melhoria Postural Operacional",
     "Pilates para Gestantes",
     "Pilates para Terceira Idade (Idosos)",
     "Condicionamento Físico Geral"
@@ -357,20 +357,31 @@ elif menu == "👥 Alunos":
             dados_atuais = df_alunos.loc[idx_real_planilha]
             aluno_para_editar = dados_atuais["Nome"]
             
+            # Gerenciamento de estado para alteração dinâmica de preços ao trocar o plano
+            if "aluno_editado_atual" not in st.session_state or st.session_state["aluno_editado_atual"] != idx_real_planilha:
+                st.session_state["aluno_editado_atual"] = idx_real_planilha
+                st.session_state["plano_ed"] = dados_atuais.get("Plano", "1x semana")
+                st.session_state["valor_ed"] = converter_para_float(dados_atuais.get("Valor", 0.0))
+
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
                 options_planos = ["1x semana", "2x semana", "3x semana"]
-                plano_atual = dados_atuais.get("Plano", "1x semana")
-                idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
-                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
-                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=converter_para_float(dados_atuais.get("Valor", 220.0)))
+                
+                def mudar_plano_callback():
+                    novo_p = st.session_state["sb_plano_ed"]
+                    st.session_state["plano_ed"] = novo_p
+                    st.session_state["valor_ed"] = float(dict_precos_padrao.get(novo_p, 180.0))
+
+                idx_plano = options_planos.index(st.session_state["plano_ed"]) if st.session_state["plano_ed"] in options_planos else 0
+                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano, key="sb_plano_ed", on_change=mudar_plano_callback)
+                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=st.session_state["valor_ed"], key="num_valor_ed")
                 
             with c_ed2:
                 novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=str(dados_atuais.get("Dias", "")))
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
             bloqueio_edicao = False
-            if novos_dias and float(novo_valor):
+            if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
                     bloqueio_edicao = True
@@ -444,12 +455,14 @@ elif menu == "👥 Alunos":
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("🎉 Alterações salvas no banco de dados!")
                 st.cache_data.clear()
+                st.rerun()
                 
             if btn_inativar_alt:
                 df_alunos.at[idx_real_planilha, "Status"] = "Inativo"
                 conn.update(worksheet="alunos", data=df_alunos)
                 st.success("❌ Aluno arquivado!")
                 st.cache_data.clear()
+                st.rerun()
     else:
         st.info("Nenhum aluno ativo cadastrado.")
 
@@ -570,6 +583,7 @@ elif menu == "📝 Cadastro":
                     conn.update(worksheet="alunos", data=df_alunos)
                     st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
                     st.cache_data.clear()
+                    st.rerun()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
@@ -591,6 +605,7 @@ elif menu == "📈 Evolução":
                 conn.update(worksheet="evolucao", data=df_evolucoes)
                 st.success("🎉 Evolução registrada com sucesso!")
                 st.cache_data.clear()
+                st.rerun()
 
     st.markdown("---")
     
@@ -618,6 +633,7 @@ elif menu == "⏳ Espera":
             conn.update(worksheet="espera", data=df_espera)
             st.success("✅ Adicionado!")
             st.cache_data.clear()
+            st.rerun()
 
 # --- 6. TELA: FINANCEIRO ---
 elif menu == "💰 Financeiro":
