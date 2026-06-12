@@ -247,7 +247,10 @@ with st.sidebar:
             "📈 Evolução",
             "⏳ Espera",
             "💰 Financeiro",
-            "👤 Perfil"
+            "👤 Perfil",
+            "⚙️ Preços",
+            "📁 Arquivo Morto",
+            "🖨️ Imprimir Prontuário"
         ]
     )
     
@@ -265,7 +268,7 @@ LISTA_QUEIXAS_PADRAO = [
     "Dor / Lesão nos Ombros",
     "Dor Cervical (Cervicalgia)",
     "Dor / Lesão nos Joelhos",
-    "Melhoria Postural Operacional",
+    "Melioria Postural Operacional",
     "Pilates para Gestantes",
     "Pilates para Terceira Idade (Idosos)",
     "Condicionamento Físico Geral"
@@ -656,6 +659,7 @@ elif menu == "💰 Financeiro":
                     conn.update(worksheet="financeiro", data=df_financeiro)
                     st.success(f"🎉 Pagamento de {nome_f} gravado com sucesso!")
                     st.cache_data.clear()
+                    st.rerun()
                 except Exception as api_err:
                     st.error(f"🛑 Erro de Gravação na Planilha: {api_err}")
 
@@ -684,6 +688,7 @@ elif menu == "⚙️ Preços":
                 conn.update(worksheet="precos", data=dados_novos_precos)
                 st.success("Tabela de preços sincronizada com sucesso!")
                 st.cache_data.clear()
+                st.rerun()
             except Exception as e:
                 st.error(f"Erro ao salvar preços: {e}")
 
@@ -708,6 +713,7 @@ elif menu == "📁 Arquivo Morto":
             conn.update(worksheet="alunos", data=df_alunos)
             st.success("Aluno reativado com sucesso!")
             st.cache_data.clear()
+            st.rerun()
     else:
         st.info("Nenhum aluno no arquivo morto.")
 
