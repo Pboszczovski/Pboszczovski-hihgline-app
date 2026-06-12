@@ -627,13 +627,23 @@ elif menu == "📈 Evolução":
             df_exibicao = df_evolucoes if aluno_filtro == "Todos" else df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
             st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
-# --- 5. TELA: ESPERA ---
+# --- 5. TELA: ESPERA (CORRIGIDA) ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
     
     if not df_espera.empty:
-        colunas_exibir = [c for c in ["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"] if c in df_espera.columns]
-        st.dataframe(df_espera[colunas_exibir], use_container_width=True, hide_index=True)
+        # Forçamos a limpeza de colunas e garantimos que o DataFrame está atualizado
+        df_espera.columns = df_espera.columns.str.strip()
+        
+        # Criamos uma cópia para exibição segura sem quebrar por falta de colunas mapeadas
+        df_espera_vis = df_espera.copy()
+        
+        # Garante que todas as colunas esperadas existam para não ocultar dados antigos
+        for col in ["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"]:
+            if col border not in df_espera_vis.columns:
+                df_espera_vis[col] = ""
+                
+        st.dataframe(df_espera_vis[["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"]], use_container_width=True, hide_index=True)
     else:
         st.info("Nenhum interessado aguardando vaga.")
         
@@ -644,10 +654,16 @@ elif menu == "⏳ Espera":
         hora_esp = st.text_input("Horário de Preferência (Ex: 18:30):")
         
         if st.form_submit_button("Adicionar à Lista") and nome_esp:
-            nova_esp_row = {"Nome": nome_esp, "Telefone": tel_esp, "Dia Preferencia": dia_esp.upper(), "Hora Preferencia": hora_esp}
+            # Salvando exatamente com os nomes corretos das colunas da planilha
+            nova_esp_row = {
+                "Nome": str(nome_esp).strip(), 
+                "Telefone": str(tel_esp).strip(), 
+                "Dia Preferencia": str(dia_esp).upper().strip(), 
+                "Hora Preferencia": str(hora_esp).strip()
+            }
             df_espera = pd.concat([df_espera, pd.DataFrame([nova_esp_row])], ignore_index=True)
             conn.update(worksheet="espera", data=df_espera.fillna("").astype(str))
-            st.success("✅ Adicionado!")
+            st.success("✅ Interessado adicionado com sucesso!")
             st.cache_data.clear()
             st.rerun()
 
