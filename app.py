@@ -1,588 +1,824 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
+import os
+import folium
+from streamlit_folium import st_folium
+from geopy.geocoders import Nominatim
+import time
 
-# ==============================================================================
-# 1. CONFIGURAÇÕES VISUAIS E IDENTIDADE VISUAL
-# ==============================================================================
-st.set_page_config(page_title="Highline Management System", layout="wide", page_icon="🏋️‍♂️")
+# ==========================================
+# 1. CONFIGURAÇÃO DE IDENTIDADE VISUAL (CSS)
+# ==========================================
+st.set_page_config(page_title="Highline Management", layout="wide", page_icon="🏋️‍♂️")
 
-# Injeção de CSS para o menu lateral verde e comportamento de impressão
 st.markdown("""
     <style>
-        [data-testid="stSidebar"] { background-color: #2E5A44 !important; }
-        [data-testid="stSidebar"] * { color: white !important; }
-        .stRadio input[type="radio"]:checked + div { color: #FFD700 !important; font-weight: bold !important; }
-        
+        [data-testid="stSidebar"] {
+            background-color: #2E5A44 !important;
+        }
+        [data-testid="stSidebar"] * {
+            color: white !important;
+        }
+        .stRadio input[type="radio"]:checked + div {
+            color: #FFD700 !important;
+            font-weight: bold !important;
+        }
+        div.stAlert {
+            background-color: #E8F5E9 !important;
+            border-left: 5px solid #2E5A44 !important;
+            color: #1B5E20 !important;
+        }
+        .logo-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px 0px 20px 0px;
+        }
         @media print {
-            [data-testid="stSidebar"], button, .no-print, header, [data-testid="stHeader"] { 
-                display: none !important; 
+            [data-testid="stSidebar"], .stHeader, footer, .no-print, button {
+                display: none !important;
             }
-            body { background: white !important; }
+            .print-container {
+                width: 100%;
+                border: none !important;
+                padding: 0 !important;
+            }
         }
     </style>
 """, unsafe_allow_html=True)
 
-# --- MENU DE NAVEGAÇÃO LATERAL (CORREÇÃO DO NAMEERROR NA LINHA 174) ---
-with st.sidebar:
-    st.markdown("## Highline Studio")
-    st.markdown("---")
-    menu = st.radio(
-        "Menu de Navegação",
-        ["📅 Agenda", "👥 Alunos", "📝 Cadastro", "📈 Evolução", "⏳ Espera", "💰 Financeiro", "👤 Perfil", "⚙️ Preços", "📁 Arquivo Morto", "🖨️ Imprimir Prontuário"]
-    )
-    st.markdown("---")
-    st.markdown("🟢 **Banco de Dados Online**")
-
-# Estilos CSS estruturados para a renderização visual do Prontuário Clínico
-ESTILO_PRONTUARIO_HTML = """
-<style>
-    .prontuario-card {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        padding: 25px;
-        border: 3px solid #2E5A44;
-        border-radius: 10px;
-        font-family: 'Arial', sans-serif;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
-        margin: 10px;
-    }
-    .prontuario-header { 
-        text-align: center; 
-        border-bottom: 4px solid #2E5A44; 
-        padding-bottom: 15px; 
-        color: #2E5A44 !important; 
-    }
-    .prontuario-secao { 
-        background-color: #2E5A44;
-        color: white !important;
-        padding: 6px 12px;
-        margin-top: 25px; 
-        font-weight: bold; 
-        border-radius: 4px;
-        font-size: 14px;
-    }
-    .tabela-prontuario { 
-        width: 100%; 
-        border-collapse: collapse; 
-        margin-top: 12px; 
-    }
-    .tabela-prontuario td { 
-        padding: 10px; 
-        border: 1px solid #cccccc; 
-        color: #000000 !important; 
-        font-size: 14px;
-    }
-</style>
-"""
-
-# ==============================================================================
-# 2. MECANISMOS DE TRATAMENTO DE DADOS (PARSERS E SANITIZADORES)
-# ==============================================================================
+# ==========================================
+# FUNÇÕES AUXILIARES DE LIMPEZA E FORMATAÇÃO
+# ==========================================
 def limpar_dataframe(df):
-    if df is None: return pd.DataFrame()
-    try:
-        df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
-        df.columns = df.columns.str.strip()
-        df = df.fillna("")
-        return df.dropna(how="all")
-    except:
-        return pd.DataFrame()
+    if df is None or df.empty:
+        return df
+    df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
+    df.columns = df.columns.str.strip()
+    df.dropna(how="all", inplace=True)
+    return df
 
 def formatar_brl(valor):
     try:
-        if pd.isna(valor) or valor == "" or valor is None: return "R$ 0,00"
-        if isinstance(valor, (int, float)): 
+        if pd.isna(valor) or valor == "":
+            return "R$ 0,00"
+        if isinstance(valor, (int, float)):
             val_float = float(valor)
         else:
-            v = str(valor).replace("R$", "").replace(" ", "")
-            if "," in v and "." in v: v = v.replace(".", "").replace(",", ".")
-            elif "," in v: v = v.replace(",", ".")
-            val_float = float(v)
+            val_limpo = str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()
+            val_float = float(val_limpo)
         return f"R$ {val_float:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     except:
-        return "R$ 0,00"
+        return str(valor)
 
-def converter_para_float(valor):
+# --- FUNÇÃO DE GEOCODIFICAÇÃO PARA O MAPA (CORRIGIDA) ---
+geolocator = Nominatim(user_agent="highline_pilates_app_nh_2026")
+
+@st.cache_data(ttl=86400)
+def buscar_coordenadas(endereco, bairro):
     try:
-        if pd.isna(valor) or valor == "" or valor is None: return 0.0
-        if isinstance(valor, (int, float)): return float(valor)
-        v = str(valor).replace("R$", "").replace(" ", "").replace(".", "")
-        if "," in v: v = v.replace(",", ".")
-        return float(v)
+        endereco_completo = f"{str(endereco)}, Bairro {str(bairro)}, Novo Hamburgo, RS, Brasil"
+        localizacao = geolocator.geocode(endereco_completo, timeout=10)
+        if localizacao:
+            return localizacao.latitude, localizacao.longitude
     except:
-        return 0.0
-
-def calcular_idade(data_nasc_str):
+        pass
     try:
-        if pd.isna(data_nasc_str) or not str(data_nasc_str).strip(): return None
-        dt = pd.to_datetime(str(data_nasc_str).strip(), dayfirst=True, errors='coerce')
-        if pd.isna(dt): return None
-        hoje = datetime.now()
-        return hoje.year - dt.year - ((hoje.month, hoje.day) < (dt.month, dt.day))
+        localizacao_bairro = geolocator.geocode(f"Bairro {str(bairro)}, Novo Hamburgo, RS, Brasil", timeout=10)
+        if localizacao_bairro:
+            return localizacao_bairro.latitude, localizacao_bairro.longitude
     except:
-        return None
+        pass
+    return None, None
 
-# ==============================================================================
-# 3. CONEXÃO DIRETA COM GOOGLE SHEETS
-# ==============================================================================
+# ==========================================
+# 2. CONEXÃO AUTOMÁTICA COM GOOGLE SHEETS
+# ==========================================
+conexao_ok = False
+erro_msg = ""
+
 try:
+    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+        if "private_key" in st.secrets["connections"]["gsheets"]:
+            p_key = st.secrets["connections"]["gsheets"]["private_key"]
+            if "\\n" in p_key:
+                st.secrets["connections"]["gsheets"]["private_key"] = p_key.replace("\\n", "\n")
+
     conn = st.connection("gsheets", type=GSheetsConnection)
-    df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=0))
-    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=0))
-    df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=0))
-    df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=0))
-    df_evolucoes = limpar_dataframe(conn.read(worksheet="evolucao", ttl=0))
-    df_arquivo_morto = limpar_dataframe(conn.read(worksheet="arquivo_morto", ttl=0))
+    
+    df_alunos = limpar_dataframe(conn.read(worksheet="alunos"))
+    df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro"))
+    df_espera = limpar_dataframe(conn.read(worksheet="espera"))
+    
+    if df_espera is not None and not df_espera.empty and "Nome" in df_espera.columns:
+        df_espera = df_espera[df_espera["Nome"].astype(str).str.strip() != ""]
+        df_espera = df_espera[~df_espera["Nome"].astype(str).str.lower().str.contains("nan", na=True)]
+
+    conexao_ok = True
 except Exception as e:
-    st.error(f"Erro Crítico de Inicialização do Banco de Dados: {e}")
+    erro_msg = str(e)
+
+# ==========================================
+# FUNÇÃO AUXILIAR DE VALIDAÇÃO DE CAPACIDADE
+# ==========================================
+def verificar_lotacao(df, dias_input, horario_input, aluno_ignorados=None):
+    if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
+        return [], []
+        
+    df_ativos = df[df["Status"].astype(str).str.upper() == "ATIVO"]
+    if aluno_ignorados:
+        df_ativos = df_ativos[df_ativos["Nome"] != aluno_ignorados]
+        
+    h_alvo = str(horario_input).strip()
+    if not h_alvo or not dias_input:
+        return [], []
+        
+    dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
+    
+    conflitos = []
+    alunos_no_horario = []
+    
+    for idx, row in df_ativos.iterrows():
+        h_atual = str(row["Horario"]).strip()
+        if h_atual == h_alvo:
+            d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
+            dias_comuns = set(dias_solicitados).intersection(set(d_atual))
+            if dias_comuns:
+                alunos_no_horario.append(f"{row['Nome']} ({row['Dias']})")
+                
+    for dia in dias_solicitados:
+        qtd_no_dia = 0
+        for idx, row in df_ativos.iterrows():
+            if str(row["Horario"]).strip() == h_alvo:
+                d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
+                if dia in d_atual:
+                    qtd_no_dia += 1
+        if qtd_no_dia >= 3:
+            conflitos.append((dia, qtd_no_dia))
+            
+    return conflitos, alunos_no_horario
+
+# ==========================================
+# 3. BARRA LATERAL - LOGO E MENU
+# ==========================================
+with st.sidebar:
+    USUARIO_GITHUB = "pboszczovski"
+    REPOSITORIO_GITHUB = "highline-app"
+    
+    url_logo_internet = f"https://raw.githubusercontent.com/{USUARIO_GITHUB}/{REPOSITORIO_GITHUB}/main/Highline%20Logo.png"
+    arquivo_logo_local = "Highline Logo.png"
+    
+    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+    if os.path.exists(arquivo_logo_local):
+        st.image(arquivo_logo_local, width=180)
+    else:
+        try:
+            st.image(url_logo_internet, width=180)
+        except:
+            st.markdown("## 🏋️‍♂️ Studio Highline")
+    st.markdown('</div>', unsafe_allow_html=True)
+        
+    st.markdown("🔒 **Menu de Navegação**")
+    
+    menu = st.radio(
+        "",
+        [
+            "📅 Agenda",
+            "👥 Alunos",
+            "📝 Cadastro",
+            "⏳ Espera",
+            "💰 Financeiro",
+            "👤 Perfil",
+            "🗺️ Mapa",
+            "⚙️ Preços",
+            "📁 Arquivo Morto",
+            "🖨️ Imprimir Prontuário"
+        ]
+    )
+    
+    st.markdown("---")
+    data_hoje = datetime.now().strftime("%d/%m/%Y")
+    st.write(f"📆 **Data:** {data_hoje}")
+    if conexao_ok:
+        st.success("● Banco de Dados Online")
+    else:
+        st.error("● Banco de Dados Offline")
+
+if not conexao_ok:
+    st.error(f"Erro crítico de configuração ou credenciais. Detalhes: {erro_msg}")
     st.stop()
 
-# Mapeamento Base de Preços
-dict_precos = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
-if not df_precos.empty and "Plano" in df_precos.columns and "Valor" in df_precos.columns:
-    for _, r in df_precos.iterrows():
-        dict_precos[str(r["Plano"]).strip()] = converter_para_float(r["Valor"])
+# ==========================================
+# 4. TRATAMENTO DAS TELAS DO APP
+# ==========================================
 
-LISTA_QUEIXAS_PADRAO = [
-    "Dor Lombar (Lombalgia)", "Hérnia de Disco / Protrusão", "Dor / Lesão nos Ombros", 
-    "Dor Cervical (Cervicalgia)", "Dor / Lesão nos Joelhos", "Melhoria Postural Operacional", 
-    "Pilates para Gestantes", "Pilates para Terceira Idade (Idosos)", "Condicionamento Físico Geral"
-]
-
-# ==============================================================================
-# 4. DIRECIONAMENTO DE TELAS E REGRAS DE NEGÓCIO
-# ==============================================================================
-
-# --- TELA: AGENDA ---
+# --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
-    st.title("📅 Agenda de Treinos Diária")
-    hoje = datetime.now()
+    st.title("📅 Agenda de Treinos")
+    hoje_datetime = datetime.now()
+    hoje_mm_dd = hoje_datetime.strftime("%m-%d")
+    niver_hoje = []
     
-    # Validação de aniversariantes do dia
-    if not df_alunos.empty and "Nascimento" in df_alunos.columns:
-        niver = []
-        for _, r in df_alunos.iterrows():
-            val_nasc = str(r["Nascimento"]).strip()
-            if "/" in val_nasc:
-                partes = val_nasc.split("/")
-                try:
-                    if int(partes[0]) == hoje.day and int(partes[1]) == hoje.month:
-                        niver.append(str(r["Nome"]))
-                except: pass
-        if niver: 
-            st.markdown(f"""<div style='background-color:#FFD700; padding:15px; border-radius:5px; color:black; font-weight:bold; margin-bottom:15px;'>
-                🎉 Aniversariantes de Hoje ({hoje.strftime('%d/%m')}): {', '.join(niver)}! 🎂
-            </div>""", unsafe_allow_html=True)
-
-    dias_map = {0: ["SEG", "SEGUNDA"], 1: ["TER", "TERÇA"], 2: ["QUA", "QUARTA"], 3: ["QUI", "QUINTA"], 4: ["SEX", "SEXTA"], 5: ["SAB", "SÁBADO"], 6: ["DOM", "DOMINGO"]}
-    busca_dias = dias_map.get(hoje.weekday(), [])
-    
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        if "Dias" in ativos.columns:
-            df_agenda = ativos[ativos["Dias"].astype(str).str.upper().apply(lambda x: any(d in x for d in busca_dias))]
-            if not df_agenda.empty:
-                sort_col = "Horario" if "Horario" in df_agenda.columns else df_agenda.columns[0]
-                df_agenda_ordenada = df_agenda.sort_values(by=sort_col)
-                exibir_cols = [c for c in ["Horario", "Nome", "Plano", "Dias", "Queixa"] if c in df_agenda_ordenada.columns]
-                st.dataframe(df_agenda_ordenada[exibir_cols], use_container_width=True, hide_index=True)
-            else: 
-                st.info("Nenhum aluno agendado ou ativo encontrado para a escala de hoje.")
-        else:
-            st.error("Coluna 'Dias' não foi detectada na planilha.")
-
-# --- TELA: GERENCIAMENTO DE ALUNOS ---
-elif menu == "👥 Alunos":
-    st.title("👥 Alteração Rápida e Gerenciamento de Alunos")
-    
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        if not ativos.empty:
-            st.metric("Total de Alunos Ativos", len(ativos))
-            busca = st.text_input("🔍 Filtrar aluno por nome:")
-            df_f = ativos[ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca else ativos
-            
-            df_vis = df_f.copy()
-            if "Valor" in df_vis.columns: df_vis["Valor"] = df_vis["Valor"].apply(formatar_brl)
-            st.dataframe(df_vis, use_container_width=True, hide_index=True)
-            
-            st.markdown("---")
-            opcoes = ["-- Escolha um Aluno --"] + [f"{r['Nome']} (Reg: {i})" for i, r in ativos.iterrows()]
-            selecionado = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", opcoes)
-            
-            if selecionado != "-- Escolha um Aluno --":
-                idx = int(selecionado.split("(Reg: ")[1].replace(")", ""))
-                dados = df_alunos.loc[idx]
+    if "Nascimento" in df_alunos.columns and "Nome" in df_alunos.columns:
+        for idx, row in df_alunos.iterrows():
+            try:
+                data_nasc = pd.to_datetime(row["Nascimento"], dayfirst=True)
+                if data_nasc.strftime("%m-%d") == hoje_mm_dd:
+                    niver_hoje.append(row["Nome"])
+            except:
+                continue
                 
-                with st.form(f"f_ed_{idx}"):
-                    c1, c2 = st.columns(2)
-                    lista_p = ["1x semana", "2x semana", "3x semana"]
-                    plano_atual = dados.get("Plano", "1x semana")
-                    idx_p = lista_p.index(plano_atual) if plano_atual in lista_p else 0
-                    
-                    novo_p = c1.selectbox("Novo Plano Contratado:", lista_p, index=idx_p)
-                    novos_d = c2.text_input("Novos Dias de Aula (Ex: SEG/QUA):", value=str(dados.get("Dias", "")))
-                    
-                    c3, c4 = st.columns(2)
-                    valor_atual_float = converter_para_float(dados.get("Valor", 0.0))
-                    novo_val = c3.number_input("Confirmar Valor Mensal (R$):", value=valor_atual_float, step=10.0)
-                    novo_h = c4.text_input("Novo Horário (Ex: 08:30):", value=str(dados.get("Horario", "")))
-                    
-                    q_at = str(dados.get("Queixa", ""))
-                    st.markdown("### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
-                    
-                    ch1, ch2, ch3 = st.columns(3)
-                    e_lom = ch1.checkbox("Dor Lombar (Lombalgia)", value="Lombar" in q_at or "lombar" in q_at.lower())
-                    e_her = ch2.checkbox("Hérnia de Disco / Protrusão", value="Hérnia" in q_at or "hernia" in q_at.lower())
-                    e_omb = ch3.checkbox("Dor / Lesão nos Ombros", value="Ombros" in q_at or "ombro" in q_at.lower())
-                    e_cev = ch1.checkbox("Dor Cervical (Cervicalgia)", value="Cervical" in q_at or "cervical" in q_at.lower())
-                    e_joe = ch2.checkbox("Dor / Lesão nos Joelhos", value="Joelhos" in q_at or "joelho" in q_at.lower())
-                    e_pos = ch3.checkbox("Melhoria Postural Operacional", value="Postural" in q_at or "postural" in q_at.lower())
-                    e_ges = ch1.checkbox("Pilates para Gestantes", value="Gestantes" in q_at or "gestante" in q_at.lower())
-                    e_ido = ch2.checkbox("Pilates para Terceira Idade (Idosos)", value="Idosos" in q_at or "idoso" in q_at.lower())
-                    e_con = ch3.checkbox("Condicionamento Físico Geral", value="Condicionamento" in q_at or "condicionamento" in q_at.lower())
-                    
-                    e_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:", value=" | ".join([t for t in q_at.split(" | ") if t not in LISTA_QUEIXAS_PADRAO and t.strip() != "nan"]))
-                    
-                    conduta_atual = str(dados.get("Conduta", ""))
-                    if conduta_atual.lower() == "nan": conduta_atual = ""
-                    e_cond = st.text_area("Diretrizes de Conduta Específicas:", value=conduta_atual)
-                    
-                    col_b1, col_b2 = st.columns(2)
-                    gravar = col_b1.form_submit_button("💾 Gravar Alterações")
-                    arquivar = col_b2.form_submit_button("❌ Mover ao Arquivo Morto")
-                    
-                    # PROCESSAMENTO DO FORMULÁRIO (BLINDAGEM ANTI-ERRO DE API)
-                    if gravar:
-                        queixas_novas = [t for t, m in [
-                            ("Dor Lombar (Lombalgia)", e_lom), ("Hérnia de Disco / Protrusão", e_her), 
-                            ("Dor / Lesão nos Ombros", e_omb), ("Dor Cervical (Cervicalgia)", e_cev),
-                            ("Dor / Lesão nos Joelhos", e_joe), ("Melhoria Postural Operacional", e_pos),
-                            ("Pilates para Gestantes", e_ges), ("Pilates para Terceira Idade (Idosos)", e_ido),
-                            ("Condicionamento Físico Geral", e_con)
-                        ] if m]
-                        if e_extra.strip() and e_extra.strip().lower() != "nan": 
-                            queixas_novas.append(e_extra.strip())
-                        
-                        df_alunos.at[idx, "Plano"] = novo_p
-                        df_alunos.at[idx, "Valor"] = float(novo_val)
-                        df_alunos.at[idx, "Dias"] = novos_d.upper()
-                        df_alunos.at[idx, "Horario"] = novo_h
-                        df_alunos.at[idx, "Queixa"] = " | ".join(queixas_novas) if queixas_novas else ""
-                        df_alunos.at[idx, "Conduta"] = e_cond.strip()
-                        
-                        # Higienização completa da tabela para evitar gspread APIError 400
-                        df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
-                        df_alunos_salvar.at[idx, "Valor"] = str(float(novo_val))
-                        
-                        conn.update(worksheet="alunos", data=df_alunos_salvar)
-                        st.success("Cadastro e anamnese atualizados com sucesso!")
-                        st.cache_data.clear()
-                        st.rerun()
-                        
-                    if arquivar:
-                        df_alunos.at[idx, "Status"] = "Inativo"
-                        row_arquivada = pd.DataFrame([df_alunos.loc[idx].to_dict()])
-                        
-                        if df_arquivo_morto.empty:
-                            df_arquivo_morto = row_arquivada
-                        else:
-                            df_arquivo_morto = pd.concat([df_arquivo_morto, row_arquivada], ignore_index=True)
-                        
-                        df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
-                        df_morto_salvar = df_arquivo_morto.fillna("").astype(str).replace("nan", "")
-                        
-                        conn.update(worksheet="alunos", data=df_alunos_salvar)
-                        conn.update(worksheet="arquivo_morto", data=df_morto_salvar)
-                        st.warning("Aluno movido para o arquivo morto.")
-                        st.cache_data.clear()
-                        st.rerun()
-        else:
-            st.info("Nenhum aluno ativo mapeado.")
-
-# --- TELA: CADASTRO COMPLETO ---
-elif menu == "📝 Cadastro":
-    st.title("📝 Cadastro e Verificação Dinâmica de Vagas")
-    st.markdown("### 🔍 Passo 1: Disponibilidade de Grade (Máx 3 por Horário)")
-    horario_teste = st.text_input("Horário Desejado (Ex: 08:30):", value="08:30")
-    
-    chx1, chx2, chx3, chx4, chx5, chx6 = st.columns(6)
-    d_seg = chx1.checkbox("SEG")
-    d_ter = chx2.checkbox("TER")
-    d_qua = chx3.checkbox("QUA")
-    d_qui = chx4.checkbox("QUI")
-    d_sex = chx5.checkbox("SEX")
-    d_sab = chx6.checkbox("SAB")
-    
-    dias_sel = [d for d, m in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if m]
-    
-    bloqueado = False
-    if dias_sel:
-        for d in dias_sel:
-            vagas = 0
-            if not df_alunos.empty and "Dias" in df_alunos.columns and "Horario" in df_alunos.columns:
-                ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-                filtro = ativos[(ativos["Dias"].astype(str).str.upper().str.contains(d)) & (ativos["Horario"].astype(str).str.strip() == horario_teste.strip())]
-                vagas = len(filtro)
-            
-            restantes = 3 - vagas
-            if restantes <= 0:
-                st.error(f"❌ Horário Esgotado na {d} às {horario_teste}! ({vagas}/3 preenchidas).")
-                bloqueado = True
-            else:
-                st.success(f"🟢 {d} às {horario_teste} disponível ({restantes} vagas livres).")
-                
-    st.markdown("---")
-    st.markdown("### 2. Formulário de Cadastro")
-    with st.form("f_cadastro_global", clear_on_submit=True):
-        cc1, cc2 = st.columns(2)
-        plano = cc1.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
-        valor = cc2.number_input("Valor Mensal Combinado (R$):", value=float(dict_precos.get(plano, 180.0)))
-        
-        c1, c2, c3 = st.columns(3)
-        nome = c1.text_input("Nome Completo:")
-        tel = c2.text_input("WhatsApp com DDD:")
-        nasc = c3.text_input("Nascimento (DD/MM/AAAA):")
-        
-        c4, c5, c6 = st.columns(3)
-        cpf = c4.text_input("CPF:")
-        genero = c5.selectbox("Gênero:", ["Feminino", "Masculino", "Outro"])
-        venc = c6.number_input("Vencimento (Dia):", min_value=1, max_value=31, value=10)
-        
-        ca1, ca2, ca3 = st.columns(3)
-        endereco = ca1.text_input("Endereço:")
-        bairro = ca2.text_input("Bairro:")
-        inicio = ca3.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
-        
-        conduta_inicial = st.text_area("Diretrizes de Conduta Iniciais:")
-        
-        if st.form_submit_button("💾 Salvar Novo Aluno"):
-            if not nome.strip() or bloqueado:
-                st.error("Verifique se o nome foi preenchido ou se a grade está bloqueada.")
-            else:
-                nova_linha = {
-                    "Nome": nome.strip(), "Telefone": tel.strip(), "Nascimento": nasc.strip(),
-                    "CPF": cpf.strip(), "Genero": genero, "Vencimento": venc, "Endereco": endereco.strip(),
-                    "Bairro": bairro.strip(), "Inicio_Aulas": inicio.strip(), "Plano": plano,
-                    "Valor": valor, "Status": "Ativo", "Dias": "/".join(dias_sel), "Horario": horario_teste.strip(),
-                    "Queixa": "", "Conduta": conduta_inicial.strip()
-                }
-                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                conn.update(worksheet="alunos", data=df_alunos.fillna("").astype(str))
-                st.success("Aluno registrado com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
-
-# --- TELA: EVOLUÇÃO ---
-elif menu == "📈 Evolução":
-    st.title("📈 Registro de Evolução Clínico-Funcional")
-    nomes_disponiveis = sorted(list(df_alunos["Nome"].dropna().unique())) if not df_alunos.empty else []
-    
-    with st.form("f_ev_clinica", clear_on_submit=True):
-        aluno_sel = st.selectbox("Selecione o Aluno:", ["-- Escolha --"] + nomes_disponiveis)
-        texto_evolucao = st.text_area("Descrição da Evolução:")
-        
-        if st.form_submit_button("💾 Gravar Histórico"):
-            if aluno_sel == "-- Escolha --" or not texto_evolucao.strip():
-                st.error("Preencha todos os campos do formulário.")
-            else:
-                nova_ev = {"Data": datetime.now().strftime("%d/%m/%Y"), "Nome do Aluno": aluno_sel, "Evolução": texto_evolucao.strip()}
-                df_evolucoes = pd.concat([df_evolucoes, pd.DataFrame([nova_ev])], ignore_index=True)
-                conn.update(worksheet="evolucao", data=df_evolucoes.fillna("").astype(str))
-                st.success("Evolução armazenada!")
-                st.cache_data.clear()
-                st.rerun()
-    st.markdown("---")
-    if not df_evolucoes.empty:
-        st.dataframe(df_evolucoes.sort_index(ascending=False), use_container_width=True, hide_index=True)
-
-# --- TELA: LISTA DE ESPERA ---
-elif menu == "⏳ Espera":
-    st.title("⏳ Fila de Espera Dinâmica")
-    if not df_espera.empty:
-        st.dataframe(df_espera, use_container_width=True, hide_index=True)
-        
-    with st.form("f_lista_esp", clear_on_submit=True):
-        n_esp = st.text_input("Nome do Interessado:")
-        t_esp = st.text_input("Telefone:")
-        d_esp = st.text_input("Dias de Preferência:")
-        h_esp = st.text_input("Horário de Preferência:")
-        
-        if st.form_submit_button("➕ Adicionar à Espera"):
-            if n_esp.strip():
-                nova_esp = {"Nome": n_esp.strip(), "Telefone": t_esp.strip(), "Dia Preferencia": d_esp.strip().upper(), "Hora Preferencia": h_esp.strip()}
-                df_espera = pd.concat([df_espera, pd.DataFrame([nova_esp])], ignore_index=True)
-                conn.update(worksheet="espera", data=df_espera.fillna("").astype(str))
-                st.success("Adicionado com sucesso!")
-                st.cache_data.clear()
-                st.rerun()
-
-# --- TELA: FINANCEIRO ---
-elif menu == "💰 Financeiro":
-    st.title("💰 Painel Financeiro Integrado")
-    tot_recebido = 0.0
-    if not df_financeiro.empty and "Status" in df_financeiro.columns:
-        tot_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor"].apply(converter_para_float).sum()
-        
-    tot_previsto = 0.0
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        if "Valor" in ativos.columns:
-            tot_previsto = ativos["Valor"].apply(converter_para_float).sum()
-
-    m1, m2 = st.columns(2)
-    m1.metric("Total Recebido (PAGO)", formatar_brl(tot_recebido))
-    m2.metric("Total Líquido Previsto", formatar_brl(tot_previsto))
-    
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        lista_pagamento = [f"{r['Nome']} | Vencimento Dia: {r.get('Vencimento', '-')} | Valor: {formatar_brl(r.get('Valor', 0))}" for _, r in ativos.iterrows()]
-        
-        if lista_pagamento:
-            st.markdown("### 💵 Registrar Baixa de Mensalidade")
-            sel_p = st.selectbox("Selecione o Aluno:", lista_pagamento)
-            forma = st.radio("Método:", ["PIX", "Dinheiro"], horizontal=True)
-            
-            if st.button("Confirmar Entrada"):
-                nome_aluno = sel_p.split(" | ")[0]
-                aluno_row = ativos[ativos["Nome"] == nome_aluno].iloc[0]
-                val_p = converter_para_float(aluno_row.get("Valor", 0.0))
-                
-                novo_lancamento = {"Aluno": nome_aluno, "Valor": val_p, "Data": datetime.now().strftime("%d/%m/%Y"), "Forma": forma, "Status": "PAGO"}
-                df_financeiro = pd.concat([df_financeiro, pd.DataFrame([novo_lancamento])], ignore_index=True)
-                conn.update(worksheet="financeiro", data=df_financeiro.fillna("").astype(str))
-                st.success("Entrada financeira registrada!")
-                st.cache_data.clear()
-                st.rerun()
-    st.markdown("---")
-    if not df_financeiro.empty:
-        st.dataframe(df_financeiro.sort_index(ascending=False), use_container_width=True, hide_index=True)
-
-# --- TELA: PERFIL ---
-elif menu == "👤 Perfil":
-    st.title("👤 Indicadores Analíticos Studio Highline")
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Matrículas Ativas", len(ativos))
-        fat = ativos["Valor"].apply(converter_para_float).sum() if "Valor" in ativos.columns else 0.0
-        c2.metric("Faturamento Mensal Estimado", formatar_brl(fat))
-        c3.metric("Fila de Espera", len(df_espera))
-        
-        st.markdown("### Concentração por Modalidade/Plano")
-        if "Plano" in ativos.columns and not list(ativos["Plano"].dropna().unique()) == []:
-            st.bar_chart(ativos["Plano"].value_counts())
-            
-        st.markdown("### Ocupação Semanal por Dia de Aula")
-        if "Dias" in ativos.columns:
-            dias_acumulados = []
-            for d_str in ativos["Dias"].dropna().astype(str):
-                for termo in d_str.replace("/", " ").split():
-                    if termo in ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"]:
-                        dias_acumulados.append(termo)
-            if dias_acumulados:
-                st.bar_chart(pd.Series(dias_acumulados).value_counts())
-
-# --- TELA: PREÇOS ---
-elif menu == "⚙️ Preços":
-    st.title("⚙️ Tabela Padrão de Precificação")
-    with st.form("f_tabela_precos"):
-        p1 = st.number_input("Valor Plano 1x semana (R$):", value=dict_precos.get("1x semana", 180.0))
-        p2 = st.number_input("Valor Plano 2x semana (R$):", value=dict_precos.get("2x semana", 220.0))
-        p3 = st.number_input("Valor Plano 3x semana (R$):", value=dict_precos.get("3x semana", 300.0))
-        
-        if st.form_submit_button("Salvar Modificações de Base"):
-            df_novos_p = pd.DataFrame([{"Plano": "1x semana", "Valor": p1}, {"Plano": "2x semana", "Valor": p2}, {"Plano": "3x semana", "Valor": p3}]).astype(str)
-            conn.update(worksheet="precos", data=df_novos_p)
-            st.success("Tabela padrão redefinida!")
-            st.cache_data.clear()
-            st.rerun()
-
-# --- TELA: ARQUIVO MORTO ---
-elif menu == "📁 Arquivo Morto":
-    st.title("📁 Alunos Inativos e Histórico (Arquivo Morto)")
-    df_f_morto = pd.DataFrame()
-    if not df_arquivo_morto.empty:
-        df_f_morto = df_arquivo_morto.copy()
-    if not df_alunos.empty and "Status" in df_alunos.columns:
-        inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"]
-        if not inativos.empty:
-            df_f_morto = pd.concat([df_f_morto, inativos], ignore_index=True).drop_duplicates(subset=["Nome"])
-            
-    if not df_f_morto.empty:
-        st.dataframe(df_f_f_morto := df_f_morto.fillna("").replace("nan", ""), use_container_width=True, hide_index=True)
+    if niver_hoje:
+        nomes_niver = ", ".join(niver_hoje)
+        st.info(f"🎉 **Hoje é aniversário de:** {nomes_niver}! 🎂")
     else:
-        st.info("O Arquivo Morto está completamente limpo.")
-
-# --- TELA: IMPRESSÃO DE PRONTUÁRIO ---
-elif menu == "🖨️ Imprimir Prontuário":
-    st.title("🖨️ Visualização e Emissão de Prontuário Clínico")
-    if not df_alunos.empty:
-        opcoes = ["-- Escolha --"] + sorted(list(df_alunos["Nome"].dropna().unique()))
-        sel_aluno = st.selectbox("Selecione o Aluno para emissão:", opcoes)
+        st.info("🎂 Nenhum aluno a fazer aniversário hoje.")
         
-        if sel_aluno != "-- Escolha --":
-            row = df_alunos[df_alunos["Nome"] == sel_aluno].iloc[0]
-            idade = calcular_idade(row.get("Nascimento", ""))
-            
-            q_p = str(row.get('Queixa', ''))
-            q_html = "Nenhuma cadastrada." if q_p.lower() == "nan" or not q_p.strip() else q_p.replace(' | ', '<br>● ')
-            
-            c_p = str(row.get('Conduta', ''))
-            c_html = "Nenhuma diretriz estipulada." if c_p.lower() == "nan" or not c_p.strip() else c_p
+    dia_semana_num = hoje_datetime.weekday()
+    dias_validos_busca = []
+    if dia_semana_num == 0:     dias_validos_busca, nome_dia_formatado = ["SEG", "2A", "SEGUNDA"], "Segunda-feira"
+    elif dia_semana_num == 1:   dias_validos_busca, nome_dia_formatado = ["TER", "3A", "TERÇA", "TERCA"], "Terça-feira"
+    elif dia_semana_num == 2:   dias_validos_busca, nome_dia_formatado = ["QUA", "4A", "QUARTA"], "Quarta-feira"
+    elif dia_semana_num == 3:   dias_validos_busca, nome_dia_formatado = ["QUI", "5A", "QUINTA"], "Quinta-feira"
+    elif dia_semana_num == 4:   dias_validos_busca, nome_dia_formatado = ["SEX", "6A", "SEXTA"], "Sexta-feira"
+    elif dia_semana_num == 5:   dias_validos_busca, nome_dia_formatado = ["SAB", "SÁBADO", "SABADO"], "Sábado"
+    else:                       dias_validos_busca, nome_dia_formatado = ["DOM", "DOMINGO"], "Domingo"
 
-            html_prontuario_final = f"""
-            <html>
-            <head>{ESTILO_PRONTUARIO_HTML}</head>
-            <body>
-            <div class="prontuario-card">
-                <div class="prontuario-header">
-                    <h2>HIGHLINE STUDIO PILATES</h2>
-                    <p style="font-size:16px; font-weight:bold; color:#2E5A44;">Ficha Clínico-Funcional & Anamnese Estruturada</p>
-                </div>
-                
-                <div class="prontuario-secao">1. DADOS IDENTIFICATÓRIOS DO ALUNO</div>
-                <table class="tabela-prontuario">
-                    <tr>
-                        <td><strong>Nome Completo:</strong> {row.get('Nome', '-')}</td>
-                        <td><strong>Gênero:</strong> {row.get('Genero', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Nascimento:</strong> {row.get('Nascimento', '-')} ({f"{idade} anos" if idade else "-"})</td>
-                        <td><strong>CPF:</strong> {row.get('CPF', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>WhatsApp/Contato:</strong> {row.get('Telefone', '-')}</td>
-                        <td><strong>Início das Atividades:</strong> {row.get('Inicio_Aulas', '-')}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2"><strong>Endereço:</strong> {row.get('Endereco', '-')} | <strong>Bairro:</strong> {row.get('Bairro', '-')}</td>
-                    </tr>
-                </table>
-                
-                <div class="prontuario-secao">2. QUADRO CLÍNICO E QUEIXAS MAPEADAS</div>
-                <p style="color:#000000 !important; font-size:14px; margin-top:12px; line-height:1.6; padding-left:5px;">
-                    ● {q_html}
-                </p>
-                
-                <div class="prontuario-secao">3. DIRETRIZES TERAPÊUTICAS E CONDUTA RECOMENDADA</div>
-                <p style="color:#000000 !important; font-size:14px; margin-top:12px; line-height:1.6; padding-left:5px; white-space: pre-line;">
-                    {c_html}
-                </p>
-            </div>
-            </body>
-            </html>
-            """
-            # CORREÇÃO: Renderiza o componente HTML de forma isolada na interface web
-            st.components.v1.html(html_prontuario_final, height=600, scrolling=True)
+    st.markdown(f"### 📋 Horários Agendados para Hoje ({nome_dia_formatado})")
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+        
+    if not df_ativos.empty:
+        if "Dias" in df_ativos.columns:
+            condicao_dia = df_ativos["Dias"].astype(str).str.upper().apply(lambda x: any(termo in x for termo in dias_validos_busca))
+            df_agenda = df_ativos[condicao_dia]
+        else:
+            df_agenda = df_ativos.copy()
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("""
-                <button class="no-print" onclick="window.print()" style="
-                    padding: 12px 24px; background-color: #2E5A44; color: white; border: none; 
-                    border-radius: 6px; font-weight: bold; cursor: pointer; box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
-                ">🖨️ Executar Impressão Física / Salvar em PDF</button>
+        if not df_agenda.empty and "Horario" in df_agenda.columns:
+            df_agenda = df_agenda.sort_values(by="Horario")
+            
+        if not df_agenda.empty:
+            colunas_agenda = [c for c in ["Horario", "Nome", "Status", "Queixa", "Conduta", "Dias"] if c in df_agenda.columns]
+            st.dataframe(df_agenda[colunas_agenda], use_container_width=True, hide_index=True)
+        else:
+            st.warning(f"Nenhum aluno agendado para esta {nome_dia_formatado}.")
+    else:
+        st.warning("Nenhum aluno ativo encontrado na base de dados.")
+
+# --- 2. TELA: ALUNOS ---
+elif menu == "👥 Alunos":
+    st.title("👥 Base de Alunos Ativos")
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+
+    st.metric("Total de Alunos Ativos Atualmente", len(df_ativos))
+    busca = st.text_input("🔍 Filtrar aluno por nome na tabela:", placeholder="Digite o nome do aluno...")
+    df_ativos_tabela = df_ativos[df_ativos["Nome"].astype(str).str.contains(busca, case=False, na=False)] if busca and "Nome" in df_ativos.columns else df_ativos
+    
+    df_ativos_visivel = df_ativos_tabela.copy()
+    if "Valor" in df_ativos_visivel.columns:
+        df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
+    
+    st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.markdown("### ✏️ Alteração Rápida e Gerenciamento de Alunos")
+    
+    if "Nome" in df_ativos.columns and not df_ativos.empty:
+        aluno_para_editar = st.selectbox("Selecione um aluno ativo para alterar dados ou desativar:", ["-- Escolha um Aluno --"] + df_ativos["Nome"].tolist())
+        
+        if aluno_para_editar != "-- Escolha um Aluno --":
+            idx_real_planilha = df_alunos[df_alunos["Nome"] == aluno_para_editar].index[0]
+            dados_atuais = df_alunos.loc[idx_real_planilha]
+            
+            c_ed1, c_ed2, c_ed3 = st.columns(3)
+            with c_ed1:
+                options_planos = ["1x semana", "2x semana", "3x semana"]
+                plano_atual = dados_atuais.get("Plano", "1x semana")
+                idx_plano = options_planos.index(plano_atual) if plano_atual in options_planos else 0
+                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano)
+                
+                valor_sugerido_bruto = dados_atuais.get("Valor", 220)
+                try:
+                    valor_sugerido_float = float(str(valor_sugerido_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                except:
+                    valor_sugerido_float = 220.0
+                    
+                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=valor_sugerido_float)
+                
+            with c_ed2:
+                novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=dados_atuais.get("Dias", ""))
+                novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=dados_atuais.get("Horario", ""))
+                
+            bloqueio_edicao = False
+            if novos_dias and novo_horario:
+                conflitos_ed, alunos_ed = verificar_lotacao(df_alunos, novos_dias, novo_horario, aluno_ignorados=aluno_para_editar)
+                if conflitos_ed:
+                    bloqueio_edicao = True
+                    for dia_conf, qtd in conflitos_ed:
+                        st.error(f"❌ Horário lotado em {dia_conf} ({qtd}/3 alunos).")
+            
+            with c_ed3:
+                st.markdown("**Ações Disponíveis:**")
+                btn_salvar_alt = st.button("💾 Gravar Alterações Diretamente", disabled=bloqueio_edicao)
+                btn_inativar_alt = st.button("❌ Desativar e Mover ao Arquivo Morto")
+            
+            if btn_salvar_alt and not bloqueio_edicao:
+                idx_inteiro = int(idx_real_planilha)
+                
+                # CORREÇÃO DE DTYPE: Força a tipagem de coluna flexível no Pandas antes da atribuição
+                df_alunos["Valor"] = df_alunos["Valor"].astype(object)
+                
+                df_alunos.at[idx_inteiro, "Plano"] = novo_plano
+                df_alunos.at[idx_inteiro, "Valor"] = float(novo_valor)  
+                df_alunos.at[idx_inteiro, "Dias"] = novos_dias
+                df_alunos.at[idx_inteiro, "Horario"] = novo_horario
+                
+                conn.update(worksheet="alunos", data=df_alunos)
+                st.success("🎉 Planilha atualizada com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+                
+            if btn_inativar_alt:
+                df_alunos.at[int(idx_real_planilha), "Status"] = "Inativo"
+                conn.update(worksheet="alunos", data=df_alunos)
+                st.success("❌ Aluno arquivado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+    else:
+        st.info("Nenhum aluno ativo disponível para gerenciamento.")
+
+# --- 3. TELA: CADASTRO ---
+elif menu == "📝 Cadastro":
+    st.title("📝 Cadastro e Anamnese Estruturada")
+    
+    st.subheader("📌 Personalização de Horários")
+    col_dias, col_hora = st.columns(2)
+    
+    with col_dias:
+        dias_selecionados = st.multiselect(
+            "Dias de Aula Desejados:",
+            ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"],
+            placeholder="Escolha os dias..."
+        )
+        dias_c = "/".join(dias_selecionados) if dias_selecionados else ""
+        
+    with col_hora:
+        lista_horarios = [
+            "06:00", "06:30", "07:00", "07:30", "08:00", "08:30", 
+            "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+            "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+            "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+            "18:00", "18:30", "19:00", "19:30", "20:00", "20:30"
+        ]
+        horario_c = st.selectbox(
+            "Horário Escolhido:",
+            ["-- Selecione um Horário --"] + lista_horarios
+        )
+        if horario_c == "-- Selecione um Horário --":
+            horario_c = ""
+        
+    bloqueio_cadastro = False
+    if dias_c and horario_c:
+        conflitos, alunos_existentes = verificar_lotacao(df_alunos, dias_c, horario_c)
+        if conflitos:
+            bloqueio_cadastro = True
+            for dia_lotado, qtd in conflitos:
+                st.error(f"🛑 O dia {dia_lotado} às {horario_c} já está lotado ({qtd}/3 alunos).")
+        else:
+            st.success(f"✅ Horário totalmente disponível.")
+
+    st.subheader("1. Dados Pessoais e de Contrato")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        plano_c = st.selectbox("Plano Contratado:", ["1x semana", "2x semana", "3x semana"])
+    with col_p2:
+        if plano_c == "1x semana": valor_padrao = 180.0
+        elif plano_c == "2x semana": valor_padrao = 220.0
+        elif plano_c == "3x semana": valor_padrao = 300.0
+        else: valor_padrao = 220.0
+        valor_c = st.number_input("Valor Combinado Mensal (R$):", value=float(valor_padrao))
+
+    with st.form("form_novo_aluno_anamnese_avancada"):
+        nome_c = st.text_input("Nome Completo:")
+        col_id1, col_id2 = st.columns(2)
+        with col_id1: tel_c = st.text_input("WhatsApp com DDD:")
+        with col_id2: cpf_c = st.text_input("CPF:")
+        
+        col_end1, col_end2, col_end3 = st.columns([1, 2, 1])
+        with col_end1: bairro_c = st.text_input("Bairro:")
+        with col_end2: endereco_base = st.text_input("Endereço (Rua, Número):")
+        with col_end3: complemento_c = st.text_input("Complemento:")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            genero_c = st.selectbox("Gênero:", ["Masculino", "Feminino", "Outro"])
+            nasc_c = st.text_input("Data de Nascimento (DD/MM/AAAA):")
+        with col2:
+            venc_c = st.number_input("Dia de Vencimento Mensal:", min_value=1, max_value=31, value=10)
+            inicio_c = st.text_input("Data de Início:", value=datetime.now().strftime("%d/%m/%Y"))
+            
+        st.subheader("2. Anamnese: Queixas Principais e Sintomas")
+        col_q1, col_q2, col_q3 = st.columns(3)
+        with col_q1:
+            q_lombar = st.checkbox("Dor Lombar (Lombalgia)")
+            q_cervical = st.checkbox("Dor Cervical (Cervicalgia)")
+            q_hernia = st.checkbox("Hérnia de Disco / Protrusão")
+        with col_q2:
+            q_joelho = st.checkbox("Dor / Lesão nos Joelhos")
+            q_ombro = st.checkbox("Dor / Lesão nos Ombros")
+        with col_q3:
+            q_postura = st.checkbox("Melhoria Postural Operacional")
+            q_flexi = st.checkbox("Ganho de Flexibilidade / Mobilidade")
+            
+        queixa_extra = st.text_input("Outras Queixas Adicionais:")
+        
+        st.subheader("3. Diretrizes de Conduta e Tratamentos Usuais")
+        col_t1, col_t2, col_t3 = st.columns(3)
+        with col_t1:
+            t_fortalecimento = st.checkbox("Fortalecimento de Core / Estabilização")
+            t_alongamento = st.checkbox("Alongamento de Cadeia Posterior")
+            t_mobilidade = st.checkbox("Mobilidade de Quadril e Torácica")
+        with col_t2:
+            t_tracao = st.checkbox("Descompressão / Tração Axial Leve")
+            t_impacto = st.checkbox("Evitar Impacto / Saltos")
+            t_flexao = st.checkbox("Restrição de Flexão de Tronco")
+        with col_t3:
+            t_extensao = st.checkbox("Restrição de Extensão de Tronco")
+            t_carga = st.checkbox("Progressão de Carga Controlada")
+            t_postural = st.checkbox("Reeducação Postural / Alinhamento")
+            
+        conduta_extra = st.text_input("Diretrizes de Conduta Específicas:")
+        progresso_c = st.text_area("Evolução Inicial do Aluno:")
+
+        if bloqueio_cadastro or not dias_c or not horario_c:
+            texto_botao = "Preencha Dias e Horário acima" if (not dias_c or not horario_c) else "Cadastro Bloqueado devido à Lotação"
+            st.form_submit_button(texto_botao, disabled=True)
+        else:
+            if st.form_submit_button("💾 Salvar Novo Aluno"):
+                if nome_c and tel_c:
+                    checkpoint_queixas = []
+                    if q_lombar: checkpoint_queixas.append("Dor Lombar")
+                    if q_cervical: checkpoint_queixas.append("Dor Cervical")
+                    if q_hernia: checkpoint_queixas.append("Hérnia de Disco")
+                    if q_joelho: checkpoint_queixas.append("Lesão Joelho")
+                    if q_ombro: checkpoint_queixas.append("Lesão Ombro")
+                    if q_postura: checkpoint_queixas.append("Melhoria Postural")
+                    if q_flexi: checkpoint_queixas.append("Ganho Flexibilidade")
+                    if queixa_extra: checkpoint_queixas.append(queixa_extra)
+                    string_queixas = " | ".join(checkpoint_queixas) if checkpoint_queixas else "Sem queixas"
+
+                    checkpoint_condutas = []
+                    if t_fortalecimento: checkpoint_condutas.append("Fortalecimento Core")
+                    if t_alongamento: checkpoint_condutas.append("Alongamento Cad. Posterior")
+                    if t_mobilidade: checkpoint_condutas.append("Mobilidade Quadril")
+                    if t_tracao: checkpoint_condutas.append("Descompressão Axial")
+                    if t_impacto: checkpoint_condutas.append("Evitar Impacto")
+                    if t_flexao: checkpoint_condutas.append("Restrição Flexão")
+                    if t_extensao: checkpoint_condutas.append("Restrição Extensão")
+                    if t_carga: checkpoint_condutas.append("Carga Controlada")
+                    if t_postural: checkpoint_condutas.append("Reeducação Postural")
+                    if conduta_extra: checkpoint_condutas.append(conduta_extra)
+                    string_condutas = " | ".join(checkpoint_condutas) if checkpoint_condutas else "Sem restrições"
+
+                    endereco_completo = f"{endereco_base} - {complemento_c}" if complemento_c else endereco_base
+
+                    nova_linha = {
+                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, 
+                        "Plano": plano_c, "Valor": float(valor_c), "Vencimento": int(venc_c), 
+                        "Dias": dias_c, "Horario": horario_c, "Status": "Ativo", 
+                        "Queixa": string_queixas, "Conduta": string_condutas, "Genero": genero_c, 
+                        "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, "Endereco": endereco_completo
+                    }
+
+                    df_novo = pd.DataFrame([nova_linha])
+                    
+                    df_alunos["Valor"] = df_alunos["Valor"].astype(object)
+                    df_alunos_atualizado = pd.concat([df_alunos, df_novo], ignore_index=True)
+
+                    conn.update(worksheet="alunos", data=df_alunos_atualizado)
+                    st.success(f"🎉 {nome_c} cadastrado com sucesso!")
+                    st.cache_data.clear()
+                    st.rerun()
+
+# --- 4. TELA: ESPERA ---
+elif menu == "⏳ Espera":
+    st.title("⏳ Gerenciamento da Lista de Espera")
+    
+    if df_espera is not None and not df_espera.empty:
+        colunas_exibir = [c for c in ["Nome", "Telefone"] if c in df_espera.columns]
+        st.dataframe(df_espera[colunas_exibir], use_container_width=True)
+    else:
+        st.info("Nenhum prospect aguardando na lista.")
+        
+    st.markdown("---")
+    
+    with st.form("form_novo_prospect_original", clear_on_submit=True):
+        nome_esp = st.text_input("Nome do Interessado:")
+        tel_esp = st.text_input("Telefone de Contato:")
+        
+        btn_adicionar_espera = st.form_submit_button("Adicionar à Lista")
+        
+        if btn_adicionar_espera:
+            if nome_esp and tel_esp:
+                nova_linha_espera = {"Nome": nome_esp, "Telefone": tel_esp}
+                df_novo_esp = pd.DataFrame([nova_linha_espera])
+                
+                if df_espera is None or df_espera.empty or "Nome" not in df_espera.columns:
+                    df_espera_atualizado = df_novo_esp
+                else:
+                    df_espera_atualizado = pd.concat([df_espera, df_novo_esp], ignore_index=True)
+                
+                conn.update(worksheet="espera", data=df_espera_atualizado)
+                st.success(f"✅ {nome_esp} adicionado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error("Por favor, preencha o Nome e o Telefone.")
+
+# --- 5. TELA: FINANCEIRO ---
+elif menu == "💰 Financeiro":
+    st.title("💰 Painel Financeiro e de Inadimplência")
+    
+    total_recebido = 0.0
+    total_pendente = 0.0
+    
+    if df_financeiro is not None and not df_financeiro.empty:
+        if "Status" in df_financeiro.columns and "Valor" in df_financeiro.columns:
+            df_financeiro["Valor_Num"] = df_financeiro["Valor"].astype(str).str.replace("R$", "", regex=False).str.replace(".", "", regex=False).str.replace(",", ".", regex=False).str.strip()
+            df_financeiro["Valor_Num"] = pd.to_numeric(df_financeiro["Valor_Num"], errors="coerce").fillna(0.0)
+            
+            total_recebido = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PAGO"]["Valor_Num"].sum()
+            total_pendente = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]["Valor_Num"].sum()
+            
+            if total_recebido == 0.0 and total_pendente == 0.0:
+                total_recebido = df_financeiro["Valor_Num"].sum()
+    
+    f_col1, f_col2 = st.columns(2)
+    with f_col1:
+        st.metric(label="Total Recebido", value=formatar_brl(total_recebido))
+    with f_col2:
+        st.metric(label="Total Pendente", value=formatar_brl(total_pendente))
+        
+    st.markdown("---")
+    
+    st.markdown("### 🔄 Dar Baixa em Pagamentos Pendentes")
+    if df_financeiro is not None and not df_financeiro.empty and "Status" in df_financeiro.columns:
+        df_pendentes = df_financeiro[df_financeiro["Status"].astype(str).str.upper() == "PENDENTE"]
+        
+        if not df_pendentes.empty:
+            opcoes_pendentes = []
+            for idx, row in df_pendentes.iterrows():
+                aluno_p = row.get("Aluno", row.get("Nome", "Desconhecido"))
+                val_p = row.get("Valor", "0.00")
+                cat_p = row.get("Categoria", "Mensalidade")
+                opcoes_pendentes.append(f"{aluno_p} - {formatar_brl(val_p)} ({cat_p}) | ID: {idx}")
+                
+            selecionado_baixa = st.selectbox("Selecione qual registro pendente deseja dar baixa:", opcoes_pendentes)
+            
+            if st.button("Confirmar Recebimento"):
+                idx_baixa = int(selecionado_baixa.split("| ID: ")[1])
+                df_financeiro.at[idx_baixa, "Status"] = "Pago"
+                if "Valor_Num" in df_financeiro.columns:
+                    df_financeiro.drop(columns=["Valor_Num"], inplace=True)
+                    
+                conn.update(worksheet="financeiro", data=df_financeiro)
+                st.success("✅ Pagamento confirmado e registrado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
+        else:
+            st.info("Nenhum pagamento pendente encontrado no momento.")
+            
+    st.markdown("---")
+    st.markdown("### 📋 Histórico Geral de Transações")
+    if df_financeiro is not None and not df_financeiro.empty:
+        colunas_exibir_fin = [c for c in df_financeiro.columns if c != "Valor_Num"]
+        
+        df_financeiro_visivel = df_financeiro[colunas_exibir_fin].copy()
+        if "Valor" in df_financeiro_visivel.columns:
+            df_financeiro_visivel["Valor"] = df_financeiro_visivel["Valor"].apply(formatar_brl)
+            
+        st.dataframe(df_financeiro_visivel, use_container_width=True, hide_index=True)
+    else:
+        st.info("A folha de cálculo 'financeiro' encontra-se sem lançamentos.")
+
+# --- 6. TELA: PERFIL ---
+elif menu == "👤 Perfil":
+    st.title("👤 Indicadores Estruturais da Base Ativa")
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+
+    if not df_ativos.empty:
+        g_col1, g_col2 = st.columns(2)
+        
+        with g_col1:
+            st.markdown("### Alunos por Tipo de Plano")
+            if "Plano" in df_ativos.columns:
+                df_planos = df_ativos["Plano"].value_counts().reset_index()
+                df_planos.columns = ["Plano", "Quantidade"]
+                fig_planos = px.bar(
+                    df_planos, 
+                    y="Plano", 
+                    x="Quantidade", 
+                    orientation="h",
+                    text="Quantidade",
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                fig_planos.update_traces(textposition="auto")
+                fig_planos.update_layout(xaxis_title="Número de Alunos", yaxis_title="Plano")
+                st.plotly_chart(fig_planos, use_container_width=True)
+            else:
+                st.info("Coluna 'Plano' não encontrada na planilha.")
+
+        with g_col2:
+            st.markdown("### Distribuição por Gênero")
+            if "Genero" in df_ativos.columns:
+                df_gen = df_ativos["Genero"].value_counts().reset_index()
+                df_gen.columns = ["Gênero", "Quantidade"]
+                fig_pizza = px.pie(
+                    df_gen, 
+                    names="Gênero", 
+                    values="Quantidade", 
+                    hole=0.3, 
+                    color_discrete_sequence=["#2E5A44", "#FFD700"]
+                )
+                st.plotly_chart(fig_pizza, use_container_width=True)
+            else:
+                st.info("Coluna 'Genero' não encontrada na planilha.")
+
+        st.markdown("---")
+        g_col3, g_col4 = st.columns(2)
+
+        with g_col3:
+            st.markdown("### Perfil de Alunos por Faixa Etária")
+            if "Nascimento" in df_ativos.columns:
+                idades = []
+                ano_atual = datetime.now().year
+                for nasc in df_ativos["Nascimento"]:
+                    try:
+                        ano_nasc = pd.to_datetime(nasc, dayfirst=True).year
+                        idades.append(ano_atual - ano_nasc)
+                    except:
+                        continue
+                if idades:
+                    df_idades = pd.DataFrame({"Idade": idades})
+                    bins = [0, 25, 35, 45, 55, 65, 120]
+                    labels = ["Até 25", "26-35", "36-45", "46-55", "56-65", "66+"]
+                    df_idades["Faixa Etária"] = pd.cut(df_idades["Idade"], bins=bins, labels=labels, right=True)
+                    df_faixas = df_idades["Faixa Etária"].value_counts().reindex(labels, fill_value=0).reset_index()
+                    df_faixas.columns = ["Faixa Etária", "Alunos"]
+                    
+                    fig_idades = px.bar(
+                        df_faixas, 
+                        x="Faixa Etária", 
+                        y="Alunos", 
+                        text="Alunos", 
+                        color_discrete_sequence=["#4f7c62"]
+                    )
+                    fig_idades.update_traces(textposition="outside")
+                    st.plotly_chart(fig_idades, use_container_width=True)
+                else:
+                    st.info("Nenhuma data de nascimento válida para calcular as idades.")
+            else:
+                st.info("Coluna 'Nascimento' não encontrada na planilha.")
+
+        with g_col4:
+            st.markdown("### Faturamento Projetado por Dia do Mês")
+            if "Vencimento" in df_ativos.columns and "Valor" in df_ativos.columns:
+                faturamento_por_dia = {dia: 0.0 for dia in range(1, 32)}
+                
+                for idx, row in df_ativos.iterrows():
+                    try:
+                        venc = int(row["Vencimento"])
+                        val_bruto = row["Valor"]
+                        if isinstance(val_bruto, (int, float)):
+                            val_f = float(val_bruto)
+                        else:
+                            val_f = float(str(val_bruto).replace("R$", "").replace(".", "").replace(",", ".").strip())
+                        if 1 <= venc <= 31:
+                            faturamento_por_dia[venc] += val_f
+                    except:
+                        continue
+                        
+                df_faturamento = pd.DataFrame(list(faturamento_por_dia.items()), columns=["Dia do Vencimento", "Faturamento Projetado"])
+                fig_faturamento = px.line(
+                    df_faturamento, 
+                    x="Dia do Vencimento", 
+                    y="Faturamento Projetado", 
+                    markers=True,
+                    color_discrete_sequence=["#2E5A44"]
+                )
+                st.plotly_chart(fig_faturamento, use_container_width=True)
+            else:
+                st.info("Colunas de 'Vencimento' ou 'Valor' ausentes para cálculo de projeção.")
+    else:
+        st.info("Sem dados de alunos ativos para estruturar o perfil estatístico.")
+
+# --- 7. TELA: MAPA (DISTRIBUIÇÃO GEOGRÁFICA) ---
+elif menu == "🗺️ Mapa":
+    st.title("🗺️ Distribuição Geográfica de Alunos")
+    st.caption("Localização espacial automatizada via endereços registrados em Novo Hamburgo.")
+    
+    df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"] if "Status" in df_alunos.columns else df_alunos.copy()
+    
+    if not df_ativos.empty and "Endereco" in df_ativos.columns and "Bairro" in df_ativos.columns:
+        alunos_com_endereco = df_ativos[df_ativos["Endereco"].notna() & (df_ativos["Endereco"].astype(str).str.strip() != "")]
+        
+        # Centralizado por padrão em Novo Hamburgo, RS
+        mapa = folium.Map(location=[-29.6846, -53.8069], zoom_start=12)
+        quantidade_localizados = 0
+        
+        for idx, linha in alunos_com_endereco.iterrows():
+            end = linha["Endereco"]
+            bair = linha["Bairro"]
+            nome = linha["Nome"]
+            
+            # PROTEÇÃO SEGURA: O unpack agora consome o retorno de fallback de forma blindada
+            lat, lon = buscar_coordenadas(end, bair)
+            
+            if lat is not None and lon is not None:
+                folium.Marker(
+                    [lat, lon],
+                    popup=f"<b>Aluno:</b> {nome}<br><b>Bairro:</b> {bair}<br><b>Endereço:</b> {end}",
+                    tooltip=nome,
+                    icon=folium.Icon(color="green", icon="home")
+                ).add_to(mapa)
+                quantidade_localizados += 1
+            time.sleep(0.1) # Evita spam do Nominatim API
+            
+        if quantidade_localizados > 0:
+            st_folium(mapa, width=900, height=500)
+            st.success(f"🗺️ {quantidade_localizados} marcadores plotados com sucesso no mapa.")
+        else:
+            st.warning("Não foi possível geolocalizar nenhum endereço. Certifique-se de que os nomes de ruas e bairros estão corretos.")
+            
+        st.markdown("---")
+        st.subheader("📊 Densidade de Alunos Ativos por Bairro")
+        contagem_bairros = df_ativos["Bairro"].value_counts().reset_index()
+        contagem_bairros.columns = ["Bairro", "Quantidade"]
+        fig_bairros = px.bar(contagem_bairros, x="Bairro", y="Quantidade", color_discrete_sequence=["#2E5A44"])
+        st.plotly_chart(fig_bairros, use_container_width=True)
+    else:
+        st.info("Colunas de 'Endereco' ou 'Bairro' ausentes na folha de cálculo.")
+
+# --- 8. TELA: PREÇOS ---
+elif menu == "⚙️ Preços":
+    st.title("⚙️ Tabela Vigente de Preços e Planos")
+    st.write("Abaixo estão listadas as definições operacionais de precificação padrão do estúdio:")
+    
+    tabela_precos = pd.DataFrame({
+        "Modalidade / Frequência": ["1x na Semana", "2x na Semana", "3x na Semana"],
+        "Valor Mensal de Referência": ["R$ 180,00", "R$ 220,00", "R$ 300,00"],
+        "Capacidade Máxima por Horário": ["3 Alunos", "3 Alunos", "3 Alunos"]
+    })
+    st.table(tabela_precos)
+
+# --- 9. TELA: ARQUIVO MORTO ---
+elif menu == "📁 Arquivo Morto":
+    st.title("📁 Arquivo Morto (Alunos Inativos)")
+    df_inativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "INATIVO"] if "Status" in df_alunos.columns else pd.DataFrame()
+    
+    if not df_inativos.empty:
+        st.write(f"Total de registros arquivados: {len(df_inativos)}")
+        st.dataframe(df_inativos, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhum histórico de aluno inativo encontrado.")
+
+# --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
+elif menu == "🖨️ Imprimir Prontuário":
+    st.title("🖨️ Emissão e Impressão de Prontuários")
+    
+    if not df_alunos.empty:
+        aluno_prontuario = st.selectbox("Selecione o Aluno para gerar a folha de impressão:", ["-- Escolha o Aluno --"] + df_alunos["Nome"].tolist())
+        
+        if aluno_prontuario != "-- Escolha o Aluno --":
+            dados_p = df_alunos[df_alunos["Nome"] == aluno_prontuario].iloc[0]
+            
+            st.markdown("<div class='no-print'>💡 Use o atalho <b>Ctrl + P</b> ou <b>Cmd + P</b> no seu navegador para imprimir ou salvar em PDF. A barra lateral e os botões serão ocultados automaticamente na impressão.</div>", unsafe_allow_html=True)
+            st.markdown("---")
+            
+            st.markdown(f"""
+            <div class='print-container' style='font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ccc;'>
+                <h2 style='text-align: center; color: #2E5A44;'>HIGHLINE STUDIO DE PILATES</h2>
+                <h3 style='text-align: center; margin-top: -10px;'>FICHA DE EVOLUÇÃO E ANAMNESE</h3>
+                <br>
+                <table style='width: 100%; border-collapse: collapse;'>
+                    <tr><td><b>Nome:</b> {dados_p.get('Nome', '')}</td><td><b>CPF:</b> {dados_p.get('CPF', 'Não informado')}</td></tr>
+                    <tr><td><b>Telefone:</b> {dados_p.get('Telefone', '')}</td><td><b>Nascimento:</b> {dados_p.get('Nascimento', '')}</td></tr>
+                    <tr><td><b>Plano:</b> {dados_p.get('Plano', '')}</td><td><b>Horário:</b> {dados_p.get('Horario', '')} ({dados_p.get('Dias', '')})</td></tr>
+                    <tr><td colspan='2'><b>Endereço:</b> {dados_p.get('Endereco', '')} - Bairro: {dados_p.get('Bairro', '')}</td></tr>
+                </table>
+                <br>
+                <h4 style='border-bottom: 2px solid #2E5A44; color: #2E5A44; padding-bottom: 3px;'>QUEIXAS E DIAGNÓSTICO</h4>
+                <p>{dados_p.get('Queixa', 'Sem queixas registradas.')}</p>
+                <br>
+                <h4 style='border-bottom: 2px solid #2E5A44; color: #2E5A44; padding-bottom: 3px;'>DIRETRIZES DE CONDUTA CLÍNICA</h4>
+                <p>{dados_p.get('Conduta', 'Sem restrições mapeadas.')}</p>
+                <br><br><br>
+                <div style='text-align: center; margin-top: 50px;'>
+                    <p>____________________________________________________</p>
+                    <p>Assinatura do Profissional Responsável</p>
+                </div>
+            </div>
             """, unsafe_allow_html=True)
