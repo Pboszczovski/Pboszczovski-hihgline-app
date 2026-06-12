@@ -357,41 +357,44 @@ elif menu == "👥 Alunos":
             dados_atuais = df_alunos.loc[idx_real_planilha]
             aluno_para_editar = dados_atuais["Nome"]
             
-            # Gerenciamento de estado para alteração dinâmica de preços ao trocar o plano
-            if "aluno_editado_atual" not in st.session_state or st.session_state["aluno_editado_atual"] != idx_real_planilha:
-                st.session_state["aluno_editado_atual"] = idx_real_planilha
-                st.session_state["plano_ed"] = dados_atuais.get("Plano", "1x semana")
-                st.session_state["valor_ed"] = converter_para_float(dados_atuais.get("Valor", 0.0))
+            # Força o reset de estado se mudar de aluno para carregar o valor real do banco primeiro
+            if "aluno_id_em_edicao" not in st.session_state or st.session_state["aluno_id_em_edicao"] != idx_real_planilha:
+                st.session_state["aluno_id_em_edicao"] = idx_real_planilha
+                st.session_state["plano_atual_input"] = dados_atuais.get("Plano", "1x semana")
+                st.session_state["valor_atual_input"] = converter_para_float(dados_atuais.get("Valor", 0.0))
 
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
                 options_planos = ["1x semana", "2x semana", "3x semana"]
                 
-                def mudar_plano_callback():
-                    novo_p = st.session_state["sb_plano_ed"]
-                    st.session_state["plano_ed"] = novo_p
-                    st.session_state["valor_ed"] = float(dict_precos_padrao.get(novo_p, 180.0))
+                # Callback dinâmico: Se mudar o plano, o valor é recalculado na hora sem travar a tela
+                def tratar_mudanca_plano():
+                    plano_escolhido = st.session_state["sel_plano_objeto"]
+                    st.session_state["plano_atual_input"] = plano_escolhido
+                    st.session_state["valor_atual_input"] = float(dict_precos_padrao.get(plano_escolhido, 180.0))
 
-                idx_plano = options_planos.index(st.session_state["plano_ed"]) if st.session_state["plano_ed"] in options_planos else 0
-                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano, key="sb_plano_ed", on_change=mudar_plano_callback)
-                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=st.session_state["valor_ed"], key="num_valor_ed")
+                idx_plano_definido = options_planos.index(st.session_state["plano_atual_input"]) if st.session_state["plano_atual_input"] in options_planos else 0
+                novo_plano = st.selectbox("Novo Plano Contratado:", options_planos, index=idx_plano_definido, key="sel_plano_objeto", on_change=tratar_mudanca_plano)
+                novo_valor = st.number_input("Confirmar Valor Mensal (R$):", value=st.session_state["valor_atual_input"], key="num_valor_objeto")
+                
+                # Sincroniza de volta se o usuário digitar manualmente um valor customizado
+                st.session_state["valor_atual_input"] = novo_valor
                 
             with c_ed2:
                 novos_dias = st.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=str(dados_atuais.get("Dias", "")))
                 novo_horario = st.text_input("Novo Horário (Ex: 08:30):", value=str(dados_atuais.get("Horario", "")))
                 
-            bloqueio_edicao = False
+            # REVISÃO: Apenas gera avisos informativos, NUNCA oculta ou bloqueia o botão de salvar!
             if novos_dias and novo_horario:
                 conflitos_ed, _ = verificar_lotacao(df_alunos, novos_dias, [novo_horario], aluno_ignorados=aluno_para_editar)
                 if conflitos_ed:
-                    bloqueio_edicao = True
                     for dia_conf, hora_conf, qtd in conflitos_ed:
-                        st.error(f"❌ Horário lotado em {dia_conf} às {hora_conf} ({qtd}/3 alunos).")
+                        st.warning(f"⚠️ Atenção administrativa: O horário de {dia_conf} às {hora_conf} já possui {qtd} alunos.")
             
             with c_ed3:
                 st.markdown("**Ações Disponíveis:**")
-                btn_salvar_alt = st.button("💾 Gravar Alterações", disabled=bloqueio_edicao)
-                btn_inativar_alt = st.button("❌ Mover ao Arquivo Morto")
+                btn_salvar_alt = st.button("💾 Gravar Alterações", key="btn_gravar_alteracoes_aluno")
+                btn_inativar_alt = st.button("❌ Mover ao Arquivo Morto", key="btn_arquivar_aluno")
             
             st.markdown("#### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
             queixa_atual_str = str(dados_atuais.get("Queixa", ""))
@@ -424,7 +427,7 @@ elif menu == "👥 Alunos":
                 conduta_atual = ""
             ed_conduta_extra = st.text_input("Diretrizes de Conduta Específicas:", value=conduta_atual)
             
-            if btn_salvar_alt and not bloqueio_edicao:
+            if btn_salvar_alt:
                 novos_tratamentos = []
                 mapeamento_check = [
                     ("Dor Lombar (Lombalgia)", ed_q_lombar),
@@ -547,43 +550,40 @@ elif menu == "📝 Cadastro":
                 st.error("❌ Preencha o Nome e o WhatsApp!")
             else:
                 conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
-                if conflitos:
-                    for dia_lotado, hora_lotada, qtd in conflitos:
-                        st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
-                else:
-                    tratamentos = []
-                    mapeamento_cadastro = [
-                        ("Dor Lombar (Lombalgia)", t_lombar),
-                        ("Hérnia de Disco / Protrusão", t_hernia),
-                        ("Dor / Lesão nos Ombros", t_ombros),
-                        ("Dor Cervical (Cervicalgia)", t_cervical),
-                        ("Dor / Lesão nos Joelhos", t_joelhos),
-                        ("Melhoria Postural Operacional", t_postural),
-                        ("Pilates para Gestantes", t_gestante),
-                        ("Pilates para Terceira Idade (Idosos)", t_idoso),
-                        ("Condicionamento Físico Geral", t_condic)
-                    ]
-                    
-                    for nome_queixa, marcado in mapeamento_cadastro:
-                        if marcado:
-                            tratamentos.append(nome_queixa)
-                            
-                    if queixa_extra.strip(): 
-                        tratamentos.append(queixa_extra.strip())
-                    
-                    nova_linha = {
-                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
-                        "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
-                        "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
-                        "Endereco": f"{endereco_base} {complemento_c}".strip()
-                    }
-                    
-                    df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                    conn.update(worksheet="alunos", data=df_alunos)
-                    st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
-                    st.cache_data.clear()
-                    st.rerun()
+                
+                tratamentos = []
+                mapeamento_cadastro = [
+                    ("Dor Lombar (Lombalgia)", t_lombar),
+                    ("Hérnia de Disco / Protrusão", t_hernia),
+                    ("Dor / Lesão nos Ombros", t_ombros),
+                    ("Dor Cervical (Cervicalgia)", t_cervical),
+                    ("Dor / Lesão nos Joelhos", t_joelhos),
+                    ("Melhoria Postural Operacional", t_postural),
+                    ("Pilates para Gestantes", t_gestante),
+                    ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                    ("Condicionamento Físico Geral", t_condic)
+                ]
+                
+                for nome_queixa, marcado in mapeamento_cadastro:
+                    if marcado:
+                        tratamentos.append(nome_queixa)
+                        
+                if queixa_extra.strip(): 
+                    tratamentos.append(queixa_extra.strip())
+                
+                nova_linha = {
+                    "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
+                    "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
+                    "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
+                    "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
+                    "Endereco": f"{endereco_base} {complemento_c}".strip()
+                }
+                
+                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
+                conn.update(worksheet="alunos", data=df_alunos)
+                st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
+                st.cache_data.clear()
+                st.rerun()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
