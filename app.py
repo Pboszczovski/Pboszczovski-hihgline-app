@@ -123,7 +123,6 @@ def calcular_idade(data_nasc_str):
 # ==============================================================================
 # 3. MOTOR DE CONEXÃO ROBUSTA COM GOOGLE SHEETS
 # ==============================================================================
-# Inicialização explícita das variáveis de ambiente para evitar falhas de escopo
 df_alunos = pd.DataFrame()
 df_financeiro = pd.DataFrame()
 df_espera = pd.DataFrame()
@@ -133,36 +132,33 @@ df_arquivo_morto = pd.DataFrame()
 conexao_ok = False
 
 try:
-    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-        if "private_key" in st.secrets["connections"]["gsheets"]:
-            st.secrets["connections"]["gsheets"]["private_key"] = st.secrets["connections"]["gsheets"]["private_key"].replace("\\n", "\n")
-    
+    # Criação de conexão nativa e segura, sem modificar o st.secrets diretamente
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Carga segura e independente de cada aba para evitar que um erro derrube o app todo
-    try: df_alunos = limpar_dataframe(conn.read(worksheet="alunos", ttl=0))
+    # Carga segura e independente de cada aba para evitar interrupções globais
+    try: df_alunos = limpiar_dataframe(conn.read(worksheet="alunos", ttl=0))
     except: df_alunos = pd.DataFrame()
     
-    try: df_financeiro = limpar_dataframe(conn.read(worksheet="financeiro", ttl=0))
+    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro", ttl=0))
     except: df_financeiro = pd.DataFrame()
     
-    try: df_espera = limpar_dataframe(conn.read(worksheet="espera", ttl=0))
+    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera", ttl=0))
     except: df_espera = pd.DataFrame()
     
-    try: df_precos = limpar_dataframe(conn.read(worksheet="precos", ttl=0))
+    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos", ttl=0))
     except: df_precos = pd.DataFrame()
     
-    try: df_evolucoes = limpar_dataframe(conn.read(worksheet="evolucao", ttl=0))
+    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao", ttl=0))
     except: df_evolucoes = pd.DataFrame()
     
-    try: df_arquivo_morto = limpar_dataframe(conn.read(worksheet="arquivo_morto", ttl=0))
+    try: df_arquivo_morto = limpiar_dataframe(conn.read(worksheet="arquivo_morto", ttl=0))
     except: df_arquivo_morto = pd.DataFrame()
     
     conexao_ok = True
 except Exception as e:
     st.error(f"Erro Crítico de Inicialização do Banco de Dados: {e}")
 
-# Mapeamento e fallback dinâmico de precificação por plano
+# Mapeamento dinâmico de precificação por plano com fallback estável
 dict_precos = {"1x semana": 180.0, "2x semana": 220.0, "3x semana": 300.0}
 if not df_precos.empty and "Plano" in df_precos.columns and "Valor" in df_precos.columns:
     for _, r in df_precos.iterrows():
@@ -195,7 +191,7 @@ with st.sidebar:
     else: 
         st.error("🔴 Banco de Dados Offline")
 
-# Constantes globais do ecossistema clínico
+# Constantes do ecossistema clínico
 LISTA_QUEIXAS_PADRAO = [
     "Dor Lombar (Lombalgia)", "Hérnia de Disco / Protrusão", "Dor / Lesão nos Ombros", 
     "Dor Cervical (Cervicalgia)", "Dor / Lesão nos Joelhos", "Melhoria Postural Operacional", 
@@ -212,8 +208,17 @@ if menu == "📅 Agenda":
     hoje = datetime.now()
     
     if not df_alunos.empty and "Nascimento" in df_alunos.columns:
-        niver = [str(r["Nome"]) for _, r in df_alunos.iterrows() if pd.notna(r["Nascimento"]) and pd.to_datetime(str(r["Nascimento"]), dayfirst=True, errors='coerce').strftime("%m-%d") == hoje.strftime("%m-%d")]
-        if niver: st.info(f"🎉 **Aniversariantes de Hoje:** {', '.join(niver)}! 🎂")
+        niver = []
+        for _, r in df_alunos.iterrows():
+            if pd.notna(r["Nascimento"]):
+                try:
+                    dt_nasc = pd.to_datetime(str(r["Nascimento"]).strip(), dayfirst=True, errors='coerce')
+                    if not pd.isna(dt_nasc) and dt_nasc.strftime("%m-%d") == hoje.strftime("%m-%d"):
+                        niver.append(str(r["Nome"]))
+                except:
+                    pass
+        if niver: 
+            st.info(f"🎉 **Aniversariantes de Hoje:** {', '.join(niver)}! 🎂")
 
     dias_map = {0: ["SEG"], 1: ["TER"], 2: ["QUA"], 3: ["QUI"], 4: ["SEX"], 5: ["SAB"], 6: ["DOM"]}
     busca_dias = dias_map.get(hoje.weekday(), [])
@@ -223,12 +228,13 @@ if menu == "📅 Agenda":
         if "Dias" in ativos.columns:
             df_agenda = ativos[ativos["Dias"].astype(str).str.upper().apply(lambda x: any(d in x for d in busca_dias))]
             if not df_agenda.empty:
-                df_agenda_ordenada = df_agenda.sort_values(by="Horario" if "Horario" in df_agenda.columns else "Nome")
-                st.dataframe(df_agenda_ordenada[["Horario", "Nome", "Plano", "Dias", "Queixa"]], use_container_width=True, hide_index=True)
+                colunas_validas = [c for c in ["Horario", "Nome", "Plano", "Dias", "Queixa"] if c in df_agenda.columns]
+                df_agenda_ordenada = df_agenda.sort_values(by="Horario" if "Horario" in df_agenda.columns else colunas_validas[0])
+                st.dataframe(df_agenda_ordenada[colunas_validas], use_container_width=True, hide_index=True)
             else: 
                 st.warning("Nenhum aluno agendado para o dia de hoje.")
         else:
-            st.error("Coluna 'Dias' não mapeada no banco de dados.")
+            st.error("Coluna 'Dias' não encontrada na aba de alunos.")
     else:
         st.info("Nenhum aluno cadastrado ou ativo encontrado na base de dados.")
 
@@ -257,7 +263,11 @@ elif menu == "👥 Alunos":
                 
                 with st.form(f"f_ed_{idx}"):
                     c1, c2, c3, c4 = st.columns(4)
-                    novo_p = c1.selectbox("Novo Plano Contratado:", ["1x semana", "2x semana", "3x semana"], index=["1x semana", "2x semana", "3x semana"].index(dados.get("Plano", "1x semana")))
+                    plano_atual = dados.get("Plano", "1x semana")
+                    lista_p = ["1x semana", "2x semana", "3x semana"]
+                    idx_p = lista_p.index(plano_atual) if plano_atual in lista_p else 0
+                    
+                    novo_p = c1.selectbox("Novo Plano Contratado:", lista_p, index=idx_p)
                     novos_d = c2.text_input("Novos Dias de Aula (Ex: Ter/Qui):", value=str(dados.get("Dias", "")))
                     novo_h = c3.text_input("Novo Horário (Ex: 08:30):", value=str(dados.get("Horario", "")))
                     novo_val = c4.number_input("Confirmar Valor Mensal (R$):", value=converter_para_float(dados.get("Valor", 0.0)))
@@ -498,7 +508,8 @@ elif menu == "👤 Perfil":
         ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]
         c1, c2 = st.columns(2)
         c1.metric("Matrículas Ativas", len(ativos))
-        c2.metric("Faturamento Mensal Estimado", formatar_brl(ativos["Valor"].apply(converter_para_float).sum()))
+        if "Valor" in ativos.columns:
+            c2.metric("Faturamento Mensal Estimado", formatar_brl(ativos["Valor"].apply(converter_para_float).sum()))
     else:
         st.info("Sem métricas consolidadas.")
 
@@ -518,7 +529,7 @@ elif menu == "⚙️ Preços":
                 {"Plano": "3x semana", "Valor": p3}
             ])
             conn.update(worksheet="precos", data=novos_precos_df)
-            st.success("Tabela de preços base atualizada globalmente!")
+            st.success("Tabela de preços base actualizada globalmente!")
             st.cache_data.clear()
             st.rerun()
 
@@ -530,7 +541,7 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("O Arquivo Morto está completamente limpo.")
 
-# --- TELA: IMPRESSÃO DE PRONTUÁRIO CLÍNICO (A CORREÇÃO DO HTML) ---
+# --- TELA: IMPRESSÃO DE PRONTUÁRIO CLÍNICO ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Visualização e Emissão de Prontuário Clínico")
     
@@ -542,14 +553,14 @@ elif menu == "🖨️ Imprimir Prontuário":
             row = df_alunos[df_alunos["Nome"] == sel_aluno].iloc[0]
             idade = calcular_idade(row.get("Nascimento", ""))
             
-            # Sanitização e tratamento de queixas vazias ou nulas
+            # Sanitização de queixas vazias ou nulas
             q_p = str(row.get('Queixa', ''))
             q_html = "Nenhuma queixa registrada." if q_p.lower() == "nan" or not q_p.strip() else q_p.replace(' | ', '<br>● ')
             
             c_p = str(row.get('Conduta', ''))
             c_html = "Nenhuma conduta ou diretriz estipulada." if c_p.lower() == "nan" or not c_p.strip() else c_p
 
-            # Construção limpa da string HTML que será renderizada na tela
+            # Construção estruturada e limpa da string HTML que será renderizada na tela
             html_prontuario_final = f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
@@ -588,9 +599,7 @@ elif menu == "🖨️ Imprimir Prontuário":
             </div>
             """
             
-            # Execução segura utilizando unsafe_allow_html=True
             st.markdown(html_prontuario_final, unsafe_allow_html=True)
-            
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("""
                 <button class="no-print" onclick="window.print()" style="
