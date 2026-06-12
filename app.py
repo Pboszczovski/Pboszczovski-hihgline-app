@@ -389,7 +389,7 @@ elif menu == "👥 Alunos":
                     st.markdown("**Ações Disponíveis:**")
                     btn_salvar_alt = st.form_submit_button("💾 Gravar Alterações")
                 
-                st.markdown("#### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
+                st.markdown("#### #### 🩺 Atualizar Anamnese: Queixas Principais e Sintomas")
                 queixa_atual_str = str(dados_atuais.get("Queixa", ""))
                 
                 c_ch1, c_ch2, c_ch3 = st.columns(3)
@@ -583,9 +583,9 @@ elif menu == "📝 Cadastro":
                     st.cache_data.clear()
                     st.rerun()
 
-# --- 4. TELA: EVOLUÇÃO (CORRIGIDA - REMOVIDO ELEMENTO DE RECARGA DE DENTRO DO FORM) ---
+# --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
@@ -593,7 +593,6 @@ elif menu == "📈 Evolução":
         lista_nomes_alunos = sorted([str(n).strip() for n in df_limpo_nomes["Nome"].unique() if str(n).strip() != ""])
     
     if lista_nomes_alunos:
-        # Colocamos os seletores fora do form para destravar totalmente a renderização e o clique do usuário
         nome_aluno_evol = st.selectbox("Selecione o Aluno para Evoluir:", lista_nomes_alunos, key="sel_aluno_evol_direto")
         data_registro = st.date_input("Data do Registro:", datetime.now(), key="date_evol_direto")
         
@@ -627,20 +626,17 @@ elif menu == "📈 Evolução":
             df_exibicao = df_evolucoes if aluno_filtro == "Todos" else df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_filtro]
             st.dataframe(df_exibicao.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
-# --- 5. TELA: ESPERA (CORRIGIDA) ---
+# --- 5. TELA: ESPERA (CORRIGIDA COMPLETA E SEM ERRO DE SINTAXE) ---
 elif menu == "⏳ Espera":
     st.title("⏳ Gerenciamento da Lista de Espera")
     
     if not df_espera.empty:
-        # Forçamos a limpeza de colunas e garantimos que o DataFrame está atualizado
         df_espera.columns = df_espera.columns.str.strip()
-        
-        # Criamos uma cópia para exibição segura sem quebrar por falta de colunas mapeadas
         df_espera_vis = df_espera.copy()
         
-        # Garante que todas as colunas esperadas existam para não ocultar dados antigos
+        # Garante as 4 colunas essenciais sem erros de sintaxe
         for col in ["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"]:
-            if col border not in df_espera_vis.columns:
+            if col not in df_espera_vis.columns:
                 df_espera_vis[col] = ""
                 
         st.dataframe(df_espera_vis[["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"]], use_container_width=True, hide_index=True)
@@ -654,7 +650,6 @@ elif menu == "⏳ Espera":
         hora_esp = st.text_input("Horário de Preferência (Ex: 18:30):")
         
         if st.form_submit_button("Adicionar à Lista") and nome_esp:
-            # Salvando exatamente com os nomes corretos das colunas da planilha
             nova_esp_row = {
                 "Nome": str(nome_esp).strip(), 
                 "Telefone": str(tel_esp).strip(), 
@@ -856,7 +851,7 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.warning("Nenhum registro encontrado na base de dados.")
 
-# --- 10. TELA: PRONTUÁRIO (CORRIGIDA - IMPEDINDO ERROS DE SINTAXE HTML POR CARACTERES ESPECIAIS) ---
+# --- 10. TELA: PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Prontuário Clínico para Impressão")
     
@@ -884,7 +879,6 @@ elif menu == "🖨️ Imprimir Prontuário":
             tel_aluno = row.get('Telefone', '-')
             bairro_aluno = row.get('Bairro', '-')
             
-            # Substituída interpolação antiga por f-string direta e limpa contra quebras
             html_prontuario_final = f"""
             <div class="prontuario-card">
                 <div class="prontuario-header">
