@@ -134,19 +134,15 @@ try:
     try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
     except: df_precos = pd.DataFrame()
     
-   try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
+  try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
-    # --- AJUSTE DE MAPEAMENTO DE COLUNAS DETECTADO NA PLANILHA ---
     if not df_alunos.empty:
-        # Se a coluna 'Valor Plano' existir e a coluna 'Valor' não, unifica
         if "Valor Plano" in df_alunos.columns and "Valor" not in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor Plano"]
-        # Se ambas existirem, garante que 'Valor' puxa os dados preenchidos da coluna R
         elif "Valor Plano" in df_alunos.columns and "Valor" in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Plano"])
             
-        # Garante que não haverá quebra de tipo de dados (String vs Float) ao renderizar
         df_alunos["Valor"] = df_alunos["Valor"].apply(converter_para_float)
 
     conexao_ok = True
