@@ -763,6 +763,41 @@ elif menu == "👤 Perfil":
         df_ativos["Valor_Float"] = df_ativos["Valor"].apply(converter_para_float)
         faturamento_projetado = df_ativos["Valor_Float"].sum()
         
+        # Lógica de Aniversariantes do Mês Atual
+        hoje_dt = datetime.now()
+        mes_atual_num = hoje_dt.month
+        meses_nomes = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        mes_atual_nome = meses_nomes[mes_atual_num]
+        
+        lista_niver_mes = []
+        if "Nascimento" in df_ativos.columns and "Nome" in df_ativos.columns:
+            for idx, row in df_ativos.iterrows():
+                try:
+                    val_nasc = str(row["Nascimento"]).strip()
+                    if "/" in val_nasc:
+                        partes = val_nasc.split("/")
+                        # Confere se o mês da data de nascimento bate com o mês corrente
+                        if int(partes[1]) == mes_atual_num:
+                            dia_niver = int(partes[0])
+                            lista_niver_mes.append({"Nome": row["Nome"], "Dia": dia_niver})
+                except:
+                    continue
+        
+        # Ordena os aniversariantes pelo dia do mês
+        if lista_niver_mes:
+            lista_niver_mes = sorted(lista_niver_mes, key=lambda k: k["Dia"])
+            texto_niver_mes = ", ".join([f"{n['Nome']} (Dia {n['Dia']:02d})" for n in lista_niver_mes])
+        else:
+            texto_niver_mes = "Nenhum aluno ativo faz aniversário este mês."
+
+        # Exibição do Painel de Aniversariantes do Mês
+        st.markdown(f"""
+            <div style='background-color:#2E5A44; padding:15px; border-radius:5px; color:white; font-weight:bold; margin-bottom:25px; border-left: 6px solid #FFD700;'>
+                🎂 Aniversariantes do Mês de {mes_atual_nome}:<br>
+                <span style='font-weight:normal; font-size:14px; color:#F5F5F5;'>{texto_niver_mes}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        
         c_k1, c_k2 = st.columns(2)
         with c_k1: st.metric("Matrículas Ativas Atualmente", f"{t_alunos} Alunos")
         with c_k2: st.metric("Faturamento Mensal Estimado Recorrente", formatar_brl(faturamento_projetado))
