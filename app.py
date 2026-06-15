@@ -238,6 +238,18 @@ LISTA_QUEIXAS_PADRAO = [
     "Condicionamento Físico Geral"
 ]
 
+LISTA_CONDUTAS_PADRAO = [
+    "Fortalecimento de Core (Powerhouse)",
+    "Mobilização e Articulação de Coluna",
+    "Alongamento de Cadeia Posterior",
+    "Estabilização Escapular / Pélvica",
+    "Evitar Flexões Intensas de Tronco",
+    "Evitar Extensões/Hiperlordose",
+    "Exercícios de Baixo Impacto Articular",
+    "Treino de Equilíbrio e Propriocepção",
+    "Controle e Reeducação Respiratória"
+]
+
 # --- 1. TELA: AGENDA ---
 if menu == "📅 Agenda":
     st.title("📅 Agenda de Treinos Diária")
@@ -366,10 +378,31 @@ elif menu == "👥 Alunos":
                 
                 ed_queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:", value=queixas_adicionais_existentes)
                 
-                conduta_atual = str(dados_atuais.get("Conduta", ""))
-                if conduta_atual.lower() == "nan" or conduta_atual.strip() == "":
-                    conduta_atual = ""
-                ed_conduta_extra = st.text_area("Diretrizes de Conduta Específicas:", value=conduta_atual)
+                st.markdown("#### 📋 Atualizar Diretrizes de Conduta Operacional")
+                conduta_atual_str = str(dados_atuais.get("Conduta", ""))
+                
+                c_cond1, c_cond2, c_cond3 = st.columns(3)
+                with c_cond1:
+                    ed_c_core = st.checkbox("Fortalecimento de Core (Powerhouse)", value=("Fortalecimento de Core (Powerhouse)" in conduta_atual_str))
+                    ed_c_escap = st.checkbox("Estabilização Escapular / Pélvica", value=("Estabilização Escapular / Pélvica" in conduta_atual_str))
+                    ed_c_baixo = st.checkbox("Exercícios de Baixo Impacto Articular", value=("Exercícios de Baixo Impacto Articular" in conduta_atual_str))
+                with c_cond2:
+                    ed_c_coluna = st.checkbox("Mobilização e Articulação de Coluna", value=("Mobilização e Articulação de Coluna" in conduta_atual_str))
+                    ed_c_flex = st.checkbox("Evitar Flexões Intensas de Tronco", value=("Evitar Flexões Intensas de Tronco" in conduta_atual_str))
+                    ed_c_equil = st.checkbox("Treino de Equilíbrio e Propriocepção", value=("Treino de Equilíbrio e Propriocepção" in conduta_atual_str))
+                with c_cond3:
+                    ed_c_post = st.checkbox("Alongamento de Cadeia Posterior", value=("Alongamento de Cadeia Posterior" in conduta_atual_str))
+                    ed_c_ext = st.checkbox("Evitar Extensões/Hiperlordose", value=("Evitar Extensões/Hiperlordose" in conduta_atual_str))
+                    ed_c_resp = st.checkbox("Controle e Reeducação Respiratória", value=("Controle e Reeducação Respiratória" in conduta_atual_str))
+                
+                condutas_limpas = []
+                for c in conduta_atual_str.split(" | "):
+                    c_strip = c.strip()
+                    if c_strip and c_strip not in LISTA_CONDUTAS_PADRAO and c_strip.lower() != "nan":
+                        condutas_limpas.append(c_strip)
+                condutas_adicionais_existentes = " | ".join(condutas_limpas)
+                
+                ed_conduta_extra = st.text_input("Outras Diretrizes Clínicas / Restrições Adicionais:", value=condutas_adicionais_existentes)
                 
                 if btn_salvar_alt:
                     valor_calc = float(dict_precos_padrao.get(novo_plano, 180.0))
@@ -386,20 +419,32 @@ elif menu == "👥 Alunos":
                         ("Pilates para Terceira Idade (Idosos)", ed_q_idoso),
                         ("Condicionamento Físico Geral", ed_q_condic)
                     ]
-                    
                     for nome_queixa, marcado in mapeamento_check:
-                        if marcado:
-                            novos_tratamentos.append(nome_queixa)
-                            
-                    if ed_queixa_extra.strip(): 
-                        novos_tratamentos.append(ed_queixa_extra.strip())
+                        if marcado: novos_tratamentos.append(nome_queixa)
+                    if ed_queixa_extra.strip(): novos_tratamentos.append(ed_queixa_extra.strip())
+                    
+                    novas_condutas = []
+                    mapeamento_conduta_check = [
+                        ("Fortalecimento de Core (Powerhouse)", ed_c_core),
+                        ("Mobilização e Articulação de Coluna", ed_c_coluna),
+                        ("Alongamento de Cadeia Posterior", ed_c_post),
+                        ("Estabilização Escapular / Pélvica", ed_c_escap),
+                        ("Evitar Flexões Intensas de Tronco", ed_c_flex),
+                        ("Evitar Extensões/Hiperlordose", ed_c_ext),
+                        ("Exercícios de Baixo Impacto Articular", ed_c_baixo),
+                        ("Treino de Equilíbrio e Propriocepção", ed_c_equil),
+                        ("Controle e Reeducação Respiratória", ed_c_resp)
+                    ]
+                    for nome_conduta, marcado in mapeamento_conduta_check:
+                        if marcado: novas_condutas.append(nome_conduta)
+                    if ed_conduta_extra.strip(): novas_condutas.append(ed_conduta_extra.strip())
                     
                     df_alunos.at[idx_real_planilha, "Plano"] = novo_plano
                     df_alunos.at[idx_real_planilha, "Valor"] = valor_calc  
                     df_alunos.at[idx_real_planilha, "Dias"] = novos_dias.upper()
                     df_alunos.at[idx_real_planilha, "Horario"] = novo_horario
                     df_alunos.at[idx_real_planilha, "Queixa"] = " | ".join(novos_tratamentos) if novos_tratamentos else ""
-                    df_alunos.at[idx_real_planilha, "Conduta"] = ed_conduta_extra.strip()
+                    df_alunos.at[idx_real_planilha, "Conduta"] = " | ".join(novas_condutas) if novas_condutas else ""
                     
                     df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
                     conn.update(worksheet="alunos", data=df_alunos_salvar)
@@ -470,18 +515,40 @@ elif menu == "📝 Cadastro":
         st.subheader("3. Anamnese: Queixas Principais e Sintomas")
         st.write("Marque abaixo todas as condições clínicas aplicáveis:")
         
-        t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="k_lombar")
-        t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="k_cervical")
-        t_gestante = st.checkbox("Pilates para Gestantes", key="k_gestante")
-        t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="k_hernia")
-        t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="k_joelhos")
-        t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="k_idoso")
-        t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="k_ombros")
-        t_postural = st.checkbox("Melhoria Postural Operacional", key="k_postural")
-        t_condic = st.checkbox("Condicionamento Físico Geral", key="k_condic")
+        c_q1, c_q2, c_q3 = st.columns(3)
+        with c_q1:
+            t_lombar = st.checkbox("Dor Lombar (Lombalgia)", key="k_lombar")
+            t_cervical = st.checkbox("Dor Cervical (Cervicalgia)", key="k_cervical")
+            t_gestante = st.checkbox("Pilates para Gestantes", key="k_gestante")
+        with c_q2:
+            t_hernia = st.checkbox("Hérnia de Disco / Protrusão", key="k_hernia")
+            t_joelhos = st.checkbox("Dor / Lesão nos Joelhos", key="k_joelhos")
+            t_idoso = st.checkbox("Pilates para Terceira Idade (Idosos)", key="k_idoso")
+        with c_q3:
+            t_ombros = st.checkbox("Dor / Lesão nos Ombros", key="k_ombros")
+            t_postural = st.checkbox("Melhoria Postural Operacional", key="k_postural")
+            t_condic = st.checkbox("Condicionamento Físico Geral", key="k_condic")
             
         queixa_extra = st.text_input("Outras Queixas Adicionais / Observações Clínicas:")
-        conduta_extra = st.text_area("Diretrizes de Conduta Específicas:")
+        
+        st.subheader("4. Diretrizes de Conduta Operacional (Tratamento)")
+        st.write("Marque as condutas e restrições padrão para o plano de aula do aluno:")
+        
+        c_cn1, c_cn2, c_cn3 = st.columns(3)
+        with c_cn1:
+            c_core = st.checkbox("Fortalecimento de Core (Powerhouse)", key="k_c_core")
+            c_escap = st.checkbox("Estabilização Escapular / Pélvica", key="k_c_escap")
+            c_baixo = st.checkbox("Exercícios de Baixo Impacto Articular", key="k_c_baixo")
+        with c_cn2:
+            c_coluna = st.checkbox("Mobilização e Articulação de Coluna", key="k_c_coluna")
+            c_flex = st.checkbox("Evitar Flexões Intensas de Tronco", key="k_c_flex")
+            c_equil = st.checkbox("Treino de Equilíbrio e Propriocepção", key="k_c_equil")
+        with c_cn3:
+            c_post = st.checkbox("Alongamento de Cadeia Posterior", key="k_c_post")
+            c_ext = st.checkbox("Evitar Extensões/Hiperlordose", key="k_c_ext")
+            c_resp = st.checkbox("Controle e Reeducação Respiratória", key="k_c_resp")
+            
+        conduta_extra = st.text_input("Outras Condutas Específicas / Observações Clínicas Extras:")
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
@@ -500,30 +567,36 @@ elif menu == "📝 Cadastro":
                     for dia_lotado, hora_lotada, qtd in conflitos:
                         st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
                 else:
+                    # Mapeamento e unificação das Queixas
                     tratamentos = []
                     mapeamento_cadastro = [
-                        ("Dor Lombar (Lombalgia)", t_lombar),
-                        ("Hérnia de Disco / Protrusão", t_hernia),
-                        ("Dor / Lesão nos Ombros", t_ombros),
-                        ("Dor Cervical (Cervicalgia)", t_cervical),
-                        ("Dor / Lesão nos Joelhos", t_joelhos),
-                        ("Melhoria Postural Operacional", t_postural),
-                        ("Pilates para Gestantes", t_gestante),
-                        ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                        ("Dor Lombar (Lombalgia)", t_lombar), ("Hérnia de Disco / Protrusão", t_hernia),
+                        ("Dor / Lesão nos Ombros", t_ombros), ("Dor Cervical (Cervicalgia)", t_cervical),
+                        ("Dor / Lesão nos Joelhos", t_joelhos), ("Melhoria Postural Operacional", t_postural),
+                        ("Pilates para Gestantes", t_gestante), ("Pilates para Terceira Idade (Idosos)", t_idoso),
                         ("Condicionamento Físico Geral", t_condic)
                     ]
-                    
                     for nome_queixa, marcado in mapeamento_cadastro:
-                        if marcado:
-                            tratamentos.append(nome_queixa)
-                            
-                    if queixa_extra.strip(): 
-                        tratamentos.append(queixa_extra.strip())
+                        if marcado: tratamentos.append(nome_queixa)
+                    if queixa_extra.strip(): tratamentos.append(queixa_extra.strip())
+                    
+                    # Mapeamento e unificação das Condutas
+                    condutas_selecionadas = []
+                    mapeamento_condutas_cad = [
+                        ("Fortalecimento de Core (Powerhouse)", c_core), ("Mobilização e Articulação de Coluna", c_coluna),
+                        ("Alongamento de Cadeia Posterior", c_post), ("Estabilização Escapular / Pélvica", c_escap),
+                        ("Evitar Flexões Intensas de Tronco", c_flex), ("Evitar Extensões/Hiperlordose", c_ext),
+                        ("Exercícios de Baixo Impacto Articular", c_baixo), ("Treino de Equilíbrio e Propriocepção", c_equil),
+                        ("Controle e Reeducação Respiratória", c_resp)
+                    ]
+                    for nome_conduta, marcado in mapeamento_condutas_cad:
+                        if marcado: condutas_selecionadas.append(nome_conduta)
+                    if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
                     
                     nova_linha = {
                         "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
                         "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": conduta_extra.strip(), 
+                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": " | ".join(condutas_selecionadas), 
                         "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
                         "Endereco": f"{endereco_base} {complemento_c}".strip()
                     }
@@ -536,7 +609,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
@@ -676,7 +749,7 @@ elif menu == "💰 Financeiro":
                 st.success("🎉 Movimentação financeira salva com sucesso!")
                 st.rerun()
 
-# --- 7. TELA: PERFIL (DASHBOARD COMPLETO RESTAURADO) ---
+# --- 7. TELA: PERFIL ---
 elif menu == "👤 Perfil":
     st.title("👤 Indicadores Estruturais da Base de Alunos")
     
@@ -858,7 +931,7 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("Nenhum aluno inativado no momento.")
 
-# --- 10. TELA: IMPRIMIR PRONTUÁRIO (COM HISTÓRICO DE EVOLUÇÕES INCLUSO) ---
+# --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Emissão e Impressão de Prontuário Clínico")
     
@@ -870,13 +943,11 @@ elif menu == "🖨️ Imprimir Prontuário":
         idade_calc = calcular_idade(row_pr.get("Nascimento", ""))
         idade_str = f"{idade_calc} anos" if idade_calc is not None else "Não Informada"
         
-        # Coleta e monta o bloco HTML dinâmico com o histórico de evoluções
         html_bloco_evolucoes = ""
         if not df_evolucoes.empty and "Nome do Aluno" in df_evolucoes.columns:
             df_filtrado_evol = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_print]
             
             if not df_filtrado_evol.empty:
-                # Classifica as evoluções da mais antiga para a mais recente
                 df_filtrado_evol = df_filtrado_evol.copy()
                 df_filtrado_evol["Data_Parsed"] = pd.to_datetime(df_filtrado_evol["Data"], format="%d/%m/%Y", errors="coerce")
                 df_filtrado_evol = df_filtrado_evol.sort_values(by="Data_Parsed", ascending=True)
@@ -962,7 +1033,7 @@ elif menu == "🖨️ Imprimir Prontuário":
                 border-radius: 0 4px 4px 0;
                 font-size: 13px;
                 color: #000 !important;
-                page-break-inside: avoid; /* Impede que uma evolução quebre no meio do papel */
+                page-break-inside: avoid;
             }}
         </style>
         </head>
