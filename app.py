@@ -536,7 +536,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
@@ -676,96 +676,136 @@ elif menu == "💰 Financeiro":
                 st.success("🎉 Movimentação financeira salva com sucesso!")
                 st.rerun()
 
-# --- 7. TELA: PERFIL ---
+# --- 7. TELA: PERFIL (DASHBOARD COMPLETO RESTAURADO) ---
 elif menu == "👤 Perfil":
-    st.title("👤 Ficha cadastral Completa e Perfil Clínico")
+    st.title("👤 Indicadores Estruturais da Base de Alunos")
     
-    if not df_alunos.empty and "Nome" in df_alunos.columns:
-        lista_perfis = sorted(list(df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"]["Nome"].dropna().unique()))
-        
-        if lista_perfis:
-            aluno_perfil = st.selectbox("Selecione o aluno para inspecionar:", lista_perfis)
-            row_p = df_alunos[df_alunos["Nome"] == aluno_perfil].iloc[0]
-            
-            c_p1, c_p2 = st.columns(2)
-            with c_p1:
-                st.markdown(f"**📱 WhatsApp:** {row_p.get('Telefone', 'Não Informado')}")
-                st.markdown(f"**🏠 Bairro:** {row_p.get('Bairro', 'Não Informado')}")
-                st.markdown(f"**📍 Endereço:** {row_p.get('Endereco', 'Não Informado')}")
-                st.markdown(f"**💳 CPF:** {row_p.get('CPF', 'Não Informado')}")
-            with c_p2:
-                st.markdown(f"**📋 Plano:** {row_p.get('Plano', 'Não Informado')}")
-                st.markdown(f"**💰 Valor:** {formatar_brl(row_p.get('Valor', 0))}")
-                st.markdown(f"**📅 Dias Contratados:** {row_p.get('Dias', 'Não Informado')}")
-                st.markdown(f"**🕒 Horário das Aulas:** {row_p.get('Horario', 'Não Informado')}")
-                
-            st.markdown("---")
-            st.subheader("🩺 Prontuário Clínico & Conduta Operacional")
-            
-            queixa_str = str(row_p.get('Queixa', 'Nenhuma queixa registrada.'))
-            conduta_str = str(row_p.get('Conduta', 'Nenhuma diretriz de conduta configurada.'))
-            
-            st.markdown(f"""
-                <div style="background-color: #E8F5E9; border-left: 5px solid #2E5A44; padding: 15px; border-radius: 4px; margin-bottom: 10px;">
-                    <strong style="color: #1B5E20;">Queixas Mapeadas:</strong> <span style="color: black;">{queixa_str}</span>
-                </div>
-                <div style="background-color: #FFFDE7; border-left: 5px solid #FBC02D; padding: 15px; border-radius: 4px; margin-bottom: 25px;">
-                    <strong style="color: #F57F17;">Conduta e Restrições:</strong> <span style="color: black;">{conduta_str}</span>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # --- SEÇÃO DE GRÁFICOS RESTAURADA ---
-            st.markdown("### 📊 Visão Geral de Presença e Evolução")
-            
-            df_filtrado_evol = pd.DataFrame()
-            if not df_evolucoes.empty and "Nome do Aluno" in df_evolucoes.columns:
-                df_filtrado_evol = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_perfil]
-            
-            col_g1, col_g2 = st.columns(2)
-            
-            with col_g1:
-                st.markdown("**Frequência Acumulada por Mês**")
-                if not df_filtrado_evol.empty and "Data" in df_filtrado_evol.columns:
-                    try:
-                        df_freq = df_filtrado_evol.copy()
-                        df_freq["Data_DT"] = pd.to_datetime(df_freq["Data"], dayfirst=True, errors='coerce')
-                        df_freq = df_freq.dropna(subset=["Data_DT"])
-                        df_freq["Mês"] = df_freq["Data_DT"].dt.strftime("%m/%Y")
-                        
-                        df_agrupado = df_freq.groupby("Mês").size().reset_index(name="Presenças")
-                        
-                        fig_presenca = px.bar(
-                            df_agrupado, x="Mês", y="Presenças",
-                            color_discrete_sequence=["#2E5A44"],
-                            text_auto=True
-                        )
-                        fig_presenca.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
-                        st.plotly_chart(fig_presenca, use_container_width=True)
-                    except:
-                        st.info("Dados insuficientes para estruturar o histórico de presenças.")
-                else:
-                    st.info("Nenhuma evolução registrada para criar indicadores de frequência.")
-                    
-            with col_g2:
-                st.markdown("**Status Financeiro Vinculado**")
-                if not df_financeiro.empty and "Aluno" in df_financeiro.columns:
-                    df_fin_aluno = df_financeiro[df_financeiro["Aluno"] == aluno_perfil]
-                    if not df_fin_aluno.empty:
-                        df_fin_agrupado = df_fin_aluno.groupby("Status").size().reset_index(name="Quantidade")
-                        fig_fin = px.pie(
-                            df_fin_agrupado, values="Quantidade", names="Status",
-                            color_discrete_sequence=["#2E5A44", "#FFD700"]
-                        )
-                        fig_fin.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
-                        st.plotly_chart(fig_fin, use_container_width=True)
-                    else:
-                        st.info("Nenhum registro financeiro localizado para este aluno.")
-                else:
-                    st.info("Base financeira sem lançamentos.")
-        else:
-            st.info("Nenhum aluno ativo encontrado para exibir perfil.")
+    if not df_alunos.empty and "Status" in df_alunos.columns:
+        df_ativos = df_alunos[df_alunos["Status"].astype(str).str.upper() == "ATIVO"].copy()
     else:
-        st.warning("Banco de dados de alunos indisponível.")
+        df_ativos = pd.DataFrame()
+        
+    if not df_ativos.empty:
+        # KPIs estruturais básicos de apoio no topo
+        t_alunos = len(df_ativos)
+        df_ativos["Valor_Float"] = df_ativos["Valor"].apply(converter_para_float)
+        faturamento_projetado = df_ativos["Valor_Float"].sum()
+        
+        c_k1, c_k2 = st.columns(2)
+        with c_k1: st.metric("Matrículas Ativas Atualmente", f"{t_alunos} Alunos")
+        with c_k2: st.metric("Faturamento Mensal Estimado Recorrente", formatar_brl(faturamento_projetado))
+        
+        st.markdown("---")
+        
+        # LINHA 1: Distribuição de Gênero e Planos Contratados
+        col_m1, col_m2 = st.columns(2)
+        
+        with col_m1:
+            st.markdown("### 📊 Distribuição por Gênero")
+            if "Genero" in df_ativos.columns and not df_ativos["Genero"].dropna().empty:
+                df_gen = df_ativos.groupby("Genero").size().reset_index(name="Quantidade")
+                fig_gen = px.pie(
+                    df_gen, values="Quantidade", names="Genero",
+                    color_discrete_sequence=["#2E5A44", "#3F7A5C", "#FFD700", "#FFEC8B"],
+                    hole=0.3
+                )
+                fig_gen.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=320)
+                st.plotly_chart(fig_gen, use_container_width=True)
+            else:
+                st.info("Gêneros não especificados na base ativa.")
+                
+        with col_m2:
+            st.markdown("### 📦 Distribuição por Planos")
+            if "Plano" in df_ativos.columns and not df_ativos["Plano"].dropna().empty:
+                df_pl = df_ativos.groupby("Plano").size().reset_index(name="Quantidade")
+                fig_pl = px.pie(
+                    df_pl, values="Quantidade", names="Plano",
+                    color_discrete_sequence=["#1B5E20", "#2E5A44", "#81C784"],
+                    hole=0.3
+                )
+                fig_pl.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=320)
+                st.plotly_chart(fig_pl, use_container_width=True)
+            else:
+                st.info("Planos não especificados na base ativa.")
+                
+        st.markdown("---")
+        
+        # LINHA 2: Ranges de Idade e Projeção Financeira Mensal por Vencimento
+        col_m3, col_m4 = st.columns(2)
+        
+        with col_m3:
+            st.markdown("### 👥 Distribuição por Ranges de Idade")
+            if "Nascimento" in df_ativos.columns:
+                df_ativos["Idade"] = df_ativos["Nascimento"].apply(calcular_idade)
+                df_idades_validas = df_ativos.dropna(subset=["Idade"])
+                
+                if not df_idades_validas.empty:
+                    bins = [0, 18, 29, 39, 49, 59, 120]
+                    labels = ["< 18 anos", "18-29 anos", "30-39 anos", "40-49 anos", "50-59 anos", "60+ anos"]
+                    df_idades_validas["Faixa Etária"] = pd.cut(df_idades_validas["Idade"], bins=bins, labels=labels, right=False)
+                    
+                    df_faixas = df_idades_validas.groupby("Faixa Etária", observed=False).size().reset_index(name="Alunos")
+                    
+                    fig_idade = px.bar(
+                        df_faixas, x="Alunos", y="Faixa Etária",
+                        orientation="h",
+                        color_discrete_sequence=["#2E5A44"],
+                        text_auto=True
+                    )
+                    fig_idade.update_layout(
+                        margin=dict(l=20, r=20, t=20, b=20), 
+                        height=350,
+                        yaxis={'categoryorder':'category ascending'}
+                    )
+                    st.plotly_chart(fig_idade, use_container_width=True)
+                else:
+                    st.info("Preencha as datas de nascimento dos alunos para exibir as faixas etárias.")
+            else:
+                st.info("Coluna de data de nascimento não localizada.")
+                
+        with col_m4:
+            st.markdown("### 📅 Projeção de Receita Mensal por Dia de Vencimento")
+            if "Vencimento" in df_ativos.columns and "Valor_Float" in df_ativos.columns:
+                try:
+                    df_ativos["Vencimento_Limpo"] = pd.to_numeric(df_ativos["Vencimento"], errors='coerce').fillna(10).astype(int)
+                    
+                    # Agrupa para obter a soma de receita e contagem (qtde) por dia
+                    df_proj_fin = df_ativos.groupby("Vencimento_Limpo").agg(
+                        Receita_Total=("Valor_Float", "sum"),
+                        Qtd_Alunos=("Nome", "count")
+                    ).reset_index()
+                    
+                    df_proj_fin = df_proj_fin.sort_values(by="Vencimento_Limpo")
+                    
+                    # Rótulo de texto formatado com o valor de receita projetado para o topo da barra
+                    df_proj_fin["Texto_Top"] = df_proj_fin["Receita_Total"].apply(lambda v: f"R$ {v:,.0f}".replace(",", "."))
+                    
+                    # CONSTRUÇÃO DO GRÁFICO EXATO REQUESTADO:
+                    # Eixo X = Dia do Vencimento
+                    # Eixo Y = Quantidade de Alunos correspondente àquele lote de vencimento
+                    # Barra = Altura ditada pela Qtde de alunos, mas exibindo a Estimativa Financeira (Texto_Top) no topo
+                    fig_proj = px.bar(
+                        df_proj_fin, 
+                        x="Vencimento_Limpo", 
+                        y="Qtd_Alunos",
+                        text="Texto_Top",
+                        color_discrete_sequence=["#2E5A44"]
+                    )
+                    
+                    fig_proj.update_traces(textposition='outside', cliponaxis=False)
+                    fig_proj.update_layout(
+                        margin=dict(l=20, r=20, t=35, b=20),
+                        height=350,
+                        xaxis=dict(title="Dia do Vencimento (Calendário)", tickmode='linear', dtick=5),
+                        yaxis=dict(title="Escala de Qtde de Alunos")
+                    )
+                    st.plotly_chart(fig_proj, use_container_width=True)
+                except Exception as e:
+                    st.info(f"Dados insuficientes ou falha de conversão nos prazos de vencimento.")
+            else:
+                st.info("Colunas de Vencimento ou Valores não localizadas para projeção.")
+    else:
+        st.warning("Não há dados cadastrais de alunos ativos suficientes para computar os gráficos analíticos.")
 
 # --- 8. TELA: PREÇOS ---
 elif menu == "⚙️ Preços":
@@ -793,7 +833,7 @@ elif menu == "⚙️ Preços":
                 
             conn.update(worksheet="precos", data=df_precos.fillna("").astype(str))
             st.cache_data.clear()
-            st.success("🎉 Preço base do plano updated!")
+            st.success("🎉 Preço base do plano atualizado com sucesso!")
             st.rerun()
 
 # --- 9. TELA: ARQUIVO MORTO ---
@@ -846,7 +886,6 @@ elif menu == "🖨️ Imprimir Prontuário":
             </div>
         """, unsafe_allow_html=True)
         
-        # CORREÇÃO DO HTML VAZANDO: Gerando string HTML encapsulada e chamando o renderizador nativo do Streamlit
         html_prontuario = f"""
         <!DOCTYPE html>
         <html>
@@ -965,7 +1004,6 @@ elif menu == "🖨️ Imprimir Prontuário":
         </body>
         </html>
         """
-        # Inserção segura via componente nativo do Streamlit para evitar vazamento textual
         components.html(html_prontuario, height=650, scrolling=True)
     else:
         st.warning("Banco de dados de alunos vazio.")
