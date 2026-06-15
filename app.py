@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import os
+import streamlit.components.v1 as components
 
 # ==========================================
 # 1. CONFIGURAÇÃO DE IDENTIDADE VISUAL (CSS)
@@ -33,59 +34,6 @@ st.markdown("""
             justify-content: center;
             align-items: center;
             padding: 10px 0px 10px 0px;
-        }
-        .prontuario-card {
-            background-color: #ffffff !important;
-            color: #000000 !important;
-            padding: 25px;
-            border: 2px solid #2E5A44;
-            border-radius: 8px;
-            font-family: Arial, sans-serif;
-            margin-top: 15px;
-            box-shadow: 0px 2px 5px rgba(0,0,0,0.05);
-        }
-        .prontuario-header {
-            text-align: center;
-            border-bottom: 3px solid #2E5A44;
-            padding-bottom: 10px;
-            color: #2E5A44 !important;
-            margin-bottom: 20px;
-        }
-        .prontuario-secao {
-            border-bottom: 1px solid #ccc;
-            margin-top: 20px;
-            padding-bottom: 5px;
-            color: #2E5A44 !important;
-            font-weight: bold;
-        }
-        .tabela-prontuario {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-        .tabela-prontuario td {
-            padding: 8px;
-            border: 1px solid #ddd;
-            color: #000000 !important;
-        }
-        .price-card {
-            background-color: #f8f9fa;
-            border: 1px solid #e0e0e0;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-            margin-bottom: 15px;
-        }
-        @media print {
-            [data-testid="stSidebar"], .stHeader, footer, .no-print, button, .stMarkdownCmds {
-                display: none !important;
-            }
-            .prontuario-card {
-                border: none !important;
-                padding: 0 !important;
-                box-shadow: none !important;
-            }
         }
     </style>
 """, unsafe_allow_html=True)
@@ -361,7 +309,6 @@ elif menu == "👥 Alunos":
         
         df_ativos_visivel = df_ativos_tabela.copy()
         if "Valor" in df_ativos_visivel.columns:
-            # CORREÇÃO CRÍTICA DO LOOP: Ajustado de formatb_brl para formatar_brl
             df_ativos_visivel["Valor"] = df_ativos_visivel["Valor"].apply(formatar_brl)
         
         st.dataframe(df_ativos_visivel, use_container_width=True, hide_index=True)
@@ -669,7 +616,6 @@ elif menu == "⏳ Espera":
 elif menu == "💰 Financeiro":
     st.title("💰 Gestão e Lançamentos Financeiros")
     
-    # 1. KPIs no topo do financeiro
     if not df_financeiro.empty:
         df_fin_calc = df_financeiro.copy()
         df_fin_calc["Valor_Float"] = df_fin_calc["Valor"].apply(converter_para_float)
@@ -755,8 +701,67 @@ elif menu == "👤 Perfil":
                 
             st.markdown("---")
             st.subheader("🩺 Prontuário Clínico & Conduta Operacional")
-            st.info(f"**Queixas Mapeadas:** {row_p.get('Queixa', 'Nenhuma queixa registrada.')}")
-            st.warning(f"**Conduta e Restrições:** {row_p.get('Conduta', 'Nenhuma diretriz de conduta configurada.')}")
+            
+            queixa_str = str(row_p.get('Queixa', 'Nenhuma queixa registrada.'))
+            conduta_str = str(row_p.get('Conduta', 'Nenhuma diretriz de conduta configurada.'))
+            
+            st.markdown(f"""
+                <div style="background-color: #E8F5E9; border-left: 5px solid #2E5A44; padding: 15px; border-radius: 4px; margin-bottom: 10px;">
+                    <strong style="color: #1B5E20;">Queixas Mapeadas:</strong> <span style="color: black;">{queixa_str}</span>
+                </div>
+                <div style="background-color: #FFFDE7; border-left: 5px solid #FBC02D; padding: 15px; border-radius: 4px; margin-bottom: 25px;">
+                    <strong style="color: #F57F17;">Conduta e Restrições:</strong> <span style="color: black;">{conduta_str}</span>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # --- SEÇÃO DE GRÁFICOS RESTAURADA ---
+            st.markdown("### 📊 Visão Geral de Presença e Evolução")
+            
+            df_filtrado_evol = pd.DataFrame()
+            if not df_evolucoes.empty and "Nome do Aluno" in df_evolucoes.columns:
+                df_filtrado_evol = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_perfil]
+            
+            col_g1, col_g2 = st.columns(2)
+            
+            with col_g1:
+                st.markdown("**Frequência Acumulada por Mês**")
+                if not df_filtrado_evol.empty and "Data" in df_filtrado_evol.columns:
+                    try:
+                        df_freq = df_filtrado_evol.copy()
+                        df_freq["Data_DT"] = pd.to_datetime(df_freq["Data"], dayfirst=True, errors='coerce')
+                        df_freq = df_freq.dropna(subset=["Data_DT"])
+                        df_freq["Mês"] = df_freq["Data_DT"].dt.strftime("%m/%Y")
+                        
+                        df_agrupado = df_freq.groupby("Mês").size().reset_index(name="Presenças")
+                        
+                        fig_presenca = px.bar(
+                            df_agrupado, x="Mês", y="Presenças",
+                            color_discrete_sequence=["#2E5A44"],
+                            text_auto=True
+                        )
+                        fig_presenca.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                        st.plotly_chart(fig_presenca, use_container_width=True)
+                    except:
+                        st.info("Dados insuficientes para estruturar o histórico de presenças.")
+                else:
+                    st.info("Nenhuma evolução registrada para criar indicadores de frequência.")
+                    
+            with col_g2:
+                st.markdown("**Status Financeiro Vinculado**")
+                if not df_financeiro.empty and "Aluno" in df_financeiro.columns:
+                    df_fin_aluno = df_financeiro[df_financeiro["Aluno"] == aluno_perfil]
+                    if not df_fin_aluno.empty:
+                        df_fin_agrupado = df_fin_aluno.groupby("Status").size().reset_index(name="Quantidade")
+                        fig_fin = px.pie(
+                            df_fin_agrupado, values="Quantidade", names="Status",
+                            color_discrete_sequence=["#2E5A44", "#FFD700"]
+                        )
+                        fig_fin.update_layout(margin=dict(l=20, r=20, t=10, b=20), height=300)
+                        st.plotly_chart(fig_fin, use_container_width=True)
+                    else:
+                        st.info("Nenhum registro financeiro localizado para este aluno.")
+                else:
+                    st.info("Base financeira sem lançamentos.")
         else:
             st.info("Nenhum aluno ativo encontrado para exibir perfil.")
     else:
@@ -788,7 +793,7 @@ elif menu == "⚙️ Preços":
                 
             conn.update(worksheet="precos", data=df_precos.fillna("").astype(str))
             st.cache_data.clear()
-            st.success("🎉 Preço base do plano atualizado com sucesso!")
+            st.success("🎉 Preço base do plano updated!")
             st.rerun()
 
 # --- 9. TELA: ARQUIVO MORTO ---
@@ -837,75 +842,130 @@ elif menu == "🖨️ Imprimir Prontuário":
         
         st.markdown("""
             <div class="no-print" style="margin-bottom: 20px;">
-                <p>💡 <b>Dica de Impressão:</b> Clique no botão abaixo para abrir a janela de impressão do seu navegador. Nas configurações, marque a opção <i>'Imprimir cores de fundo'</i> para reter a identidade visual.</p>
+                <p>💡 <b>Dica de Impressão:</b> Use as opções nativas do seu navegador (Ctrl + P). Certifique-se de habilitar a opção <i>'Imprimir gráficos de fundo'</i> para reter as cores originais.</p>
             </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🖨️ Acionar Comando de Impressão"):
-            st.markdown("<script>window.print();</script>", unsafe_allow_html=True)
-            
-        # Layout estruturado do Prontuário Clínico para Impressão HTML
-        st.markdown(f"""
+        # CORREÇÃO DO HTML VAZANDO: Gerando string HTML encapsulada e chamando o renderizador nativo do Streamlit
+        html_prontuario = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <style>
+            .prontuario-card {{
+                background-color: #ffffff !important;
+                color: #000000 !important;
+                padding: 25px;
+                border: 2px solid #2E5A44;
+                border-radius: 8px;
+                font-family: Arial, sans-serif;
+                box-shadow: 0px 2px 5px rgba(0,0,0,0.05);
+            }}
+            .prontuario-header {{
+                text-align: center;
+                border-bottom: 3px solid #2E5A44;
+                padding-bottom: 10px;
+                color: #2E5A44 !important;
+                margin-bottom: 20px;
+            }}
+            .prontuario-secao {{
+                border-bottom: 1px solid #ccc;
+                margin-top: 20px;
+                padding-bottom: 5px;
+                color: #2E5A44 !important;
+                font-weight: bold;
+                text-transform: uppercase;
+                font-size: 14px;
+            }}
+            .tabela-prontuario {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }}
+            .tabela-prontuario td {{
+                padding: 8px;
+                border: 1px solid #ddd;
+                color: #000000 !important;
+                font-size: 13px;
+            }}
+            .bloco-texto {{
+                background-color: #f9f9f9;
+                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                margin-top: 8px;
+                font-size: 13px;
+                color: black !important;
+            }}
+        </style>
+        </head>
+        <body>
             <div class="prontuario-card">
                 <div class="prontuario-header">
-                    <h2 style="margin:0; font-size: 26px;">HIGHLINE MANAGEMENT</h2>
-                    <p style="margin:5px 0 0 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase;">Ficha Cadastral e Prontuário de Pilates</p>
+                    <h2 style="margin:0; font-size: 24px; color: #2E5A44;">HIGHLINE MANAGEMENT</h2>
+                    <p style="margin:5px 0 0 0; font-size: 13px; letter-spacing: 1px; color: #555;">FICHA CADASTRAL E PRONTUÁRIO DE PILATES</p>
                 </div>
                 
-                <div class="prontuario-secao">📌 DADOS PESSOAIS E CONTRATUAIS</div>
+                <div class="prontuario-secao">📌 Dados Pessoais e Contratuais</div>
                 <table class="tabela-prontuario">
                     <tr>
-                        <td style="width: 15%; font-weight: bold;">Nome:</td>
+                        <td style="width: 15%; font-weight: bold; background-color: #f5f5f5;">Nome:</td>
                         <td style="width: 50%;">{row_pr.get('Nome', '')}</td>
-                        <td style="width: 15%; font-weight: bold;">Gênero:</td>
+                        <td style="width: 15%; font-weight: bold; background-color: #f5f5f5;">Gênero:</td>
                         <td style="width: 20%;">{row_pr.get('Genero', 'Não Informado')}</td>
                     </tr>
                     <tr>
-                        <td style="font-weight: bold;">Nascimento:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">Nascimento:</td>
                         <td>{row_pr.get('Nascimento', 'Não Informado')} ({idade_str})</td>
-                        <td style="font-weight: bold;">CPF:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">CPF:</td>
                         <td>{row_pr.get('CPF', 'Não Informado')}</td>
                     </tr>
                     <tr>
-                        <td style="font-weight: bold;">WhatsApp:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">WhatsApp:</td>
                         <td>{row_pr.get('Telefone', 'Não Informado')}</td>
-                        <td style="font-weight: bold;">Início:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">Início:</td>
                         <td>{row_pr.get('Inicio_Aulas', 'Não Informado')}</td>
                     </tr>
                     <tr>
-                        <td style="font-weight: bold;">Endereço:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">Endereço:</td>
                         <td colspan="3">{row_pr.get('Endereco', 'Não Informado')}</td>
                     </tr>
                 </table>
                 
-                <div class="prontuario-secao">📌 ROTINA DE TREINOS</div>
+                <div class="prontuario-secao">📌 Rotina de Treinos</div>
                 <table class="tabela-prontuario">
                     <tr>
-                        <td style="width: 15%; font-weight: bold;">Plano:</td>
+                        <td style="width: 15%; font-weight: bold; background-color: #f5f5f5;">Plano:</td>
                         <td style="width: 35%;">{row_pr.get('Plano', '')}</td>
-                        <td style="width: 15%; font-weight: bold;">Horário:</td>
+                        <td style="width: 15%; font-weight: bold; background-color: #f5f5f5;">Horário:</td>
                         <td style="width: 35%;">{row_pr.get('Horario', '')}</td>
                     </tr>
                     <tr>
-                        <td style="font-weight: bold;">Dias Fixos:</td>
+                        <td style="font-weight: bold; background-color: #f5f5f5;">Dias Fixos:</td>
                         <td colspan="3">{row_pr.get('Dias', '')}</td>
                     </tr>
                 </table>
                 
-                <div class="prontuario-secao">🩺 DIAGNÓSTICO CLÍNICO E ANAMNESE</div>
-                <div style="background-color: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; color: black !important;">
+                <div class="prontuario-secao">🩺 Diagnóstico Clínico e Anamnese</div>
+                <div class="bloco-texto">
                     {row_pr.get('Queixa', 'Nenhuma condição mapeada.')}
                 </div>
                 
-                <div class="prontuario-secao">📋 DIRETRIZES DE CONDUTA OPERACIONAL</div>
-                <div style="background-color: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-top: 10px; white-space: pre-wrap; color: black !important;">
+                <div class="prontuario-secao">📋 Diretrizes de Conduta Operacional</div>
+                <div class="bloco-texto" style="white-space: pre-wrap;">
                     {row_pr.get('Conduta', 'Sem restrições ou diretrizes específicas cadastradas.')}
                 </div>
                 
-                <div style="margin-top: 80px; text-align: center;" class="no-print">
-                    <p style="border-top: 1px solid #000; width: 300px; margin: 0 auto; padding-top: 5px; color: black !important;">Assinatura do Profissional Responsável</p>
+                <div style="margin-top: 60px; text-align: center;">
+                    <div style="border-top: 1px solid #000; width: 280px; margin: 0 auto; padding-top: 5px; font-size: 12px;">
+                        Assinatura do Profissional Responsável
+                    </div>
                 </div>
             </div>
-        """, unsafe_allow_html=True)
+        </body>
+        </html>
+        """
+        # Inserção segura via componente nativo do Streamlit para evitar vazamento textual
+        components.html(html_prontuario, height=650, scrolling=True)
     else:
         st.warning("Banco de dados de alunos vazio.")
