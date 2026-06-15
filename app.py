@@ -536,7 +536,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clinical dos Alunos")
+    st.title("📈 Evolução Clínica dos Alunos")
     
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
@@ -686,7 +686,6 @@ elif menu == "👤 Perfil":
         df_ativos = pd.DataFrame()
         
     if not df_ativos.empty:
-        # KPIs estruturais básicos de apoio no topo
         t_alunos = len(df_ativos)
         df_ativos["Valor_Float"] = df_ativos["Valor"].apply(converter_para_float)
         faturamento_projetado = df_ativos["Valor_Float"].sum()
@@ -697,7 +696,6 @@ elif menu == "👤 Perfil":
         
         st.markdown("---")
         
-        # LINHA 1: Distribuição de Gênero e Planos Contratados
         col_m1, col_m2 = st.columns(2)
         
         with col_m1:
@@ -730,7 +728,6 @@ elif menu == "👤 Perfil":
                 
         st.markdown("---")
         
-        # LINHA 2: Ranges de Idade e Projeção Financeira Mensal por Vencimento
         col_m3, col_m4 = st.columns(2)
         
         with col_m3:
@@ -769,21 +766,14 @@ elif menu == "👤 Perfil":
                 try:
                     df_ativos["Vencimento_Limpo"] = pd.to_numeric(df_ativos["Vencimento"], errors='coerce').fillna(10).astype(int)
                     
-                    # Agrupa para obter a soma de receita e contagem (qtde) por dia
                     df_proj_fin = df_ativos.groupby("Vencimento_Limpo").agg(
                         Receita_Total=("Valor_Float", "sum"),
                         Qtd_Alunos=("Nome", "count")
                     ).reset_index()
                     
                     df_proj_fin = df_proj_fin.sort_values(by="Vencimento_Limpo")
-                    
-                    # Rótulo de texto formatado com o valor de receita projetado para o topo da barra
                     df_proj_fin["Texto_Top"] = df_proj_fin["Receita_Total"].apply(lambda v: f"R$ {v:,.0f}".replace(",", "."))
                     
-                    # CONSTRUÇÃO DO GRÁFICO EXATO REQUESTADO:
-                    # Eixo X = Dia do Vencimento
-                    # Eixo Y = Quantidade de Alunos correspondente àquele lote de vencimento
-                    # Barra = Altura ditada pela Qtde de alunos, mas exibindo a Estimativa Financeira (Texto_Top) no topo
                     fig_proj = px.bar(
                         df_proj_fin, 
                         x="Vencimento_Limpo", 
@@ -833,7 +823,7 @@ elif menu == "⚙️ Preços":
                 
             conn.update(worksheet="precos", data=df_precos.fillna("").astype(str))
             st.cache_data.clear()
-            st.success("🎉 Preço base do plano atualizado com sucesso!")
+            st.success("🎉 Preço base do plano updated com sucesso!")
             st.rerun()
 
 # --- 9. TELA: ARQUIVO MORTO ---
@@ -868,7 +858,7 @@ elif menu == "📁 Arquivo Morto":
     else:
         st.info("Nenhum aluno inativado no momento.")
 
-# --- 10. TELA: IMPRIMIR PRONTUÁRIO ---
+# --- 10. TELA: IMPRIMIR PRONTUÁRIO (COM HISTÓRICO DE EVOLUÇÕES INCLUSO) ---
 elif menu == "🖨️ Imprimir Prontuário":
     st.title("🖨️ Emissão e Impressão de Prontuário Clínico")
     
@@ -880,6 +870,31 @@ elif menu == "🖨️ Imprimir Prontuário":
         idade_calc = calcular_idade(row_pr.get("Nascimento", ""))
         idade_str = f"{idade_calc} anos" if idade_calc is not None else "Não Informada"
         
+        # Coleta e monta o bloco HTML dinâmico com o histórico de evoluções
+        html_bloco_evolucoes = ""
+        if not df_evolucoes.empty and "Nome do Aluno" in df_evolucoes.columns:
+            df_filtrado_evol = df_evolucoes[df_evolucoes["Nome do Aluno"] == aluno_print]
+            
+            if not df_filtrado_evol.empty:
+                # Classifica as evoluções da mais antiga para a mais recente
+                df_filtrado_evol = df_filtrado_evol.copy()
+                df_filtrado_evol["Data_Parsed"] = pd.to_datetime(df_filtrado_evol["Data"], format="%d/%m/%Y", errors="coerce")
+                df_filtrado_evol = df_filtrado_evol.sort_values(by="Data_Parsed", ascending=True)
+                
+                for _, rev in df_filtrado_evol.iterrows():
+                    data_ev = rev.get("Data", "N/A")
+                    texto_ev = rev.get("Evolução", "").replace("\n", "<br>")
+                    html_bloco_evolucoes += f"""
+                    <div class="card-item-evol">
+                        <strong>📅 Data do Registro:</strong> {data_ev}<br>
+                        <p style="margin: 5px 0 0 0; text-align: justify; line-height: 1.4;">{texto_ev}</p>
+                    </div>
+                    """
+            else:
+                html_bloco_evolucoes = "<div class='bloco-texto'>Nenhum histórico de evolução clínica foi registrado para este paciente até o momento.</div>"
+        else:
+            html_bloco_evolucoes = "<div class='bloco-texto'>Nenhum histórico de evolução clínica foi registrado para este paciente até o momento.</div>"
+
         st.markdown("""
             <div class="no-print" style="margin-bottom: 20px;">
                 <p>💡 <b>Dica de Impressão:</b> Use as opções nativas do seu navegador (Ctrl + P). Certifique-se de habilitar a opção <i>'Imprimir gráficos de fundo'</i> para reter as cores originais.</p>
@@ -935,6 +950,19 @@ elif menu == "🖨️ Imprimir Prontuário":
                 margin-top: 8px;
                 font-size: 13px;
                 color: black !important;
+            }}
+            .card-item-evol {{
+                background-color: #fcfcfc;
+                border-left: 4px solid #2E5A44;
+                padding: 10px 12px;
+                margin-top: 10px;
+                border-top: 1px solid #eee;
+                border-right: 1px solid #eee;
+                border-bottom: 1px solid #eee;
+                border-radius: 0 4px 4px 0;
+                font-size: 13px;
+                color: #000 !important;
+                page-break-inside: avoid; /* Impede que uma evolução quebre no meio do papel */
             }}
         </style>
         </head>
@@ -995,7 +1023,12 @@ elif menu == "🖨️ Imprimir Prontuário":
                     {row_pr.get('Conduta', 'Sem restrições ou diretrizes específicas cadastradas.')}
                 </div>
                 
-                <div style="margin-top: 60px; text-align: center;">
+                <div class="prontuario-secao">📈 Evolução do Tratamento</div>
+                <div style="margin-top: 5px;">
+                    {html_bloco_evolucoes}
+                </div>
+                
+                <div style="margin-top: 60px; text-align: center; page-break-inside: avoid;">
                     <div style="border-top: 1px solid #000; width: 280px; margin: 0 auto; padding-top: 5px; font-size: 12px;">
                         Assinatura do Profissional Responsável
                     </div>
