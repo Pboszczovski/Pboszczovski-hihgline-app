@@ -98,99 +98,33 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO COM GOOGLE SHEETS (COM CACHE)
+# 2. CONEXÃO COM GOOGLE SHEETS
 # ==========================================
 conexao_ok = False
-erro_msg = ""
-
-df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Endereco"])
-df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Forma", "Categoria", "Status"])
-df_espera = pd.DataFrame(columns=["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"])
-df_precos = pd.DataFrame(columns=["Plano", "Valor"])
-df_evolucoes = pd.DataFrame(columns=["Data", "Nome do Aluno", "Evolução"])
 
 try:
-    if "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-        if "private_key" in st.secrets["connections"]["gsheets"]:
-            p_key = st.secrets["connections"]["gsheets"]["private_key"]
-            if "\\n" in p_key:
-                p_key = p_key.replace("\\n", "\n")
-
     conn = st.connection("gsheets", type=GSheetsConnection)
     
     @st.cache_data(ttl=15)
     def ler_dados_planilha(aba):
         return conn.read(worksheet=aba)
     
-    try: df_alunos = limpiar_dataframe(ler_dados_planilha("alunos"))
-    except: df_alunos = pd.DataFrame()
-    
-    try: df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
-    except: df_financeiro = pd.DataFrame()
-    
-    try: df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
-    except: df_espera = pd.DataFrame()
-    
-    try: 
-        df_precos = limpar_dataframe(ler_dados_planilha("precos"))
-    except: 
-        df_precos = pd.DataFrame()
-    
-    # É aqui que o erro de indentação está ocorrendo:
-    try: 
-        df_evolucoes = limpar_dataframe(ler_dados_planilha("evolucao"))
-    except: 
-        df_evolucoes = pd.DataFrame()
-
-    if not df_alunos.empty:
-        if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor Mensal"]
-        elif "Valor Mensal" in df_alunos.columns and "Valor" in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Mensal"])
+    # Carregamento forçado das abas
+    df_alunos = limpiar_dataframe(ler_dados_planilha("alunos"))
+    df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
+    df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
+    df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
+    df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
 
     conexao_ok = True
 except Exception as e:
-    erro_msg = str(e)
-
-if df_precos is None or df_precos.empty or "Plano" not in df_precos.columns:
-    df_precos = pd.DataFrame([
-        {"Plano": "1x semana", "Valor": 180.0},
-        {"Plano": "2x semana", "Valor": 220.0},
-        {"Plano": "3x semana", "Valor": 300.0}
-    ])
-
-dict_precos_padrao = {}
-for _, r in df_precos.iterrows():
-    dict_precos_padrao[str(r["Plano"])] = converter_para_float(r["Valor"])
-
-def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None):
-    if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
-        return [], []
-        
-    df_ativos = df[df["Status"].astype(str).str.upper() == "ATIVO"]
-    if aluno_ignorados:
-        df_ativos = df_ativos[df_ativos["Nome"] != aluno_ignorados]
-        
-    dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
-    horarios_solicitados = [str(h).strip() for h in horarios_input_list if str(h).strip()]
-    
-    if not horarios_solicitados or not dias_solicitados:
-        return [], []
-        
-    conflitos = []
-    for h_alvo in horarios_solicitados:
-        for dia in dias_solicitados:
-            qtd_no_bloco = 0
-            for idx, row in df_ativos.iterrows():
-                h_atual = str(row["Horario"]).strip()
-                if h_alvo in h_atual:
-                    d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
-                    if dia in d_atual:
-                        qtd_no_bloco += 1
-            if qtd_no_bloco >= 3:
-                conflitos.append((dia, h_alvo, qtd_no_bloco))
-                
-    return conflitos, []
+    st.error(f"Erro ao conectar com Google Sheets: {e}")
+    # Inicializa vazios caso falhe
+    df_alunos = pd.DataFrame()
+    df_financeiro = pd.DataFrame()
+    df_espera = pd.DataFrame()
+    df_precos = pd.DataFrame()
+    df_evolucoes = pd.DataFrame()
 
 # ==========================================
 # 3. BARRA LATERAL - LOGO LOCAL E MENU
