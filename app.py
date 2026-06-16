@@ -134,16 +134,14 @@ try:
     try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
     except: df_precos = pd.DataFrame()
     
-  try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
+    try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
     if not df_alunos.empty:
-        if "Valor Plano" in df_alunos.columns and "Valor" not in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor Plano"]
-        elif "Valor Plano" in df_alunos.columns and "Valor" in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Plano"])
-            
-        df_alunos["Valor"] = df_alunos["Valor"].apply(converter_para_float)
+        if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
+            df_alunos["Valor"] = df_alunos["Valor Mensal"]
+        elif "Valor Mensal" in df_alunos.columns and "Valor" in df_alunos.columns:
+            df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Mensal"])
 
     conexao_ok = True
 except Exception as e:
@@ -476,42 +474,25 @@ elif menu == "📝 Cadastro":
     with col_p2:
         valor_c = st.number_input("Valor Combinado Mensal (R$):", value=valor_sugerido_plano, step=10.0)
 
-    # --- ANTES DO FORMULÁRIO: VALIDAÇÃO EM TEMPO REAL ---
-    st.subheader("📌 Escolha de Dias e Horários de Treino")
-    c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
-    with c_dia1: d_seg = st.checkbox("SEG")
-    with c_dia2: d_ter = st.checkbox("TER")
-    with c_dia3: d_qua = st.checkbox("QUA")
-    with c_dia4: d_qui = st.checkbox("QUI")
-    with c_dia5: d_sex = st.checkbox("SEX")
-    with c_dia6: d_sab = st.checkbox("SAB")
-    
-    lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
-    st.markdown("**Horários Disponíveis (Selecione um ou mais):**")
-    cols_horarios = st.columns(6)
-    horarios_selecionados = []
-    for index, hora_item in enumerate(lista_horarios_disponiveis):
-        with cols_horarios[index % 6]:
-            if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
-                horarios_selecionados.append(hora_item)
+    with st.form("form_dados_anamnese_completo", clear_on_submit=True):
+        st.subheader("📌 Escolha de Dias e Horários de Treino")
+        c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
+        with c_dia1: d_seg = st.checkbox("SEG")
+        with c_dia2: d_ter = st.checkbox("TER")
+        with c_dia3: d_qua = st.checkbox("QUA")
+        with c_dia4: d_qui = st.checkbox("QUI")
+        with c_dia5: d_sex = st.checkbox("SEX")
+        with c_dia6: d_sab = st.checkbox("SAB")
+        
+        lista_horarios_disponiveis = ["7:30", "8:30", "9:30", "10:30", "11:30", "12:30", "15:30", "16:30", "17:30", "18:30", "19:30"]
+        st.markdown("**Horários Disponíveis (Selecione um ou mais):**")
+        cols_horarios = st.columns(6)
+        horarios_selecionados = []
+        for index, hora_item in enumerate(lista_horarios_disponiveis):
+            with cols_horarios[index % 6]:
+                if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
+                    horarios_selecionados.append(hora_item)
 
-    # Processa os dias selecionados para a checagem em tempo real
-    dias_lista_check = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
-    dias_c_check = "/".join(dias_lista_check)
-
-    # Checagem preventiva antes de preencher o resto do formulário
-    pode_gravar = True
-    if dias_lista_check and horarios_selecionados:
-        conflitos_preventivos, _ = verificar_lotacao(df_alunos, dias_c_check, horarios_selecionados)
-        if conflitos_preventivos:
-            pode_gravar = False
-            for dia_lotado, hora_lotada, qtd in conflitos_preventivos:
-                st.error(f"🛑 **Bloqueado:** O dia **{dia_lotado}** às **{hora_lotada}** já tem o limite máximo de {qtd}/3 alunos ativos. Escolha outra combinação.")
-        else:
-            st.success("✅ Dias e horários disponíveis para agendamento!")
-
-    # Formulário para os dados do aluno (Garante persistência dos alertas)
-    with st.form("form_dados_anamnese_completo", clear_on_submit=False):
         st.subheader("2. Dados Pessoais do Aluno")
         nome_c = st.text_input("Nome Completo:")
         col_id1, col_id2 = st.columns(2)
@@ -572,55 +553,59 @@ elif menu == "📝 Cadastro":
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
         if btn_enviar:
-            dias_c = "/".join(dias_lista_check)
+            dias_lista = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
+            dias_c = "/".join(dias_lista)
             horario_c = ", ".join(horarios_selecionados)
 
             if not dias_c or not horario_c:
-                st.error("❌ Selecione pelo menos um Dia e Horário na seção superior!")
+                st.error("❌ Selecione pelo menos um Dia e Horário!")
             elif not nome_c or not tel_c:
-                st.error("❌ Preencha os campos obrigatórios: Nome e WhatsApp!")
-            elif not pode_gravar:
-                st.error("❌ Impossível salvar. Há um conflito de horário ativo (Limite de 3 alunos excedido). Altere os dias/horários acima.")
+                st.error("❌ Preencha o Nome e o WhatsApp!")
             else:
-                # Mapeamento e unificação das Queixas
-                tratamentos = []
-                mapeamento_cadastro = [
-                    ("Dor Lombar (Lombalgia)", t_lombar), ("Hérnia de Disco / Protrusão", t_hernia),
-                    ("Dor / Lesão nos Ombros", t_ombros), ("Dor Cervical (Cervicalgia)", t_cervical),
-                    ("Dor / Lesão nos Joelhos", t_joelhos), ("Melhoria Postural Operacional", t_postural),
-                    ("Pilates para Gestantes", t_gestante), ("Pilates para Terceira Idade (Idosos)", t_idoso),
-                    ("Condicionamento Físico Geral", t_condic)
-                ]
-                for nome_queixa, marcado in mapeamento_cadastro:
-                    if marcado: tratamentos.append(nome_queixa)
-                if queixa_extra.strip(): tratamentos.append(queixa_extra.strip())
-                
-                # Mapeamento e unificação das Condutas
-                condutas_selecionadas = []
-                mapeamento_condutas_cad = [
-                    ("Fortalecimento de Core (Powerhouse)", c_core), ("Mobilização e Articulação de Coluna", c_coluna),
-                    ("Alongamento de Cadeia Posterior", c_post), ("Estabilização Escapular / Pélvica", c_escap),
-                    ("Evitar Flexões Intensas de Tronco", c_flex), ("Evitar Extensões/Hiperlordose", c_ext),
-                    ("Exercícios de Baixo Impacto Articular", c_baixo), ("Treino de Equilíbrio e Propriocepção", c_equil),
-                    ("Controle e Reeducação Respiratória", c_resp)
-                ]
-                for nome_conduta, marcado in mapeamento_condutas_cad:
-                    if marcado: condutas_selecionadas.append(nome_conduta)
-                if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
-                
-                nova_linha = {
-                    "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
-                    "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
-                    "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": " | ".join(condutas_selecionadas), 
-                    "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
-                    "Endereco": f"{endereco_base} {complemento_c}".strip()
-                }
-                
-                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                conn.update(worksheet="alunos", data=df_alunos.fillna("").astype(str))
-                st.cache_data.clear()
-                st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
-                st.rerun()
+                conflitos, _ = verificar_lotacao(df_alunos, dias_c, horarios_selecionados)
+                if conflitos:
+                    for dia_lotado, hora_lotada, qtd in conflitos:
+                        st.error(f"🛑 O dia {dia_lotado} às {hora_lotada} atingiu o limite máximo ({qtd}/3 alunos).")
+                else:
+                    # Mapeamento e unificação das Queixas
+                    tratamentos = []
+                    mapeamento_cadastro = [
+                        ("Dor Lombar (Lombalgia)", t_lombar), ("Hérnia de Disco / Protrusão", t_hernia),
+                        ("Dor / Lesão nos Ombros", t_ombros), ("Dor Cervical (Cervicalgia)", t_cervical),
+                        ("Dor / Lesão nos Joelhos", t_joelhos), ("Melhoria Postural Operacional", t_postural),
+                        ("Pilates para Gestantes", t_gestante), ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                        ("Condicionamento Físico Geral", t_condic)
+                    ]
+                    for nome_queixa, marcado in mapeamento_cadastro:
+                        if marcado: tratamentos.append(nome_queixa)
+                    if queixa_extra.strip(): tratamentos.append(queixa_extra.strip())
+                    
+                    # Mapeamento e unificação das Condutas
+                    condutas_selecionadas = []
+                    mapeamento_condutas_cad = [
+                        ("Fortalecimento de Core (Powerhouse)", c_core), ("Mobilização e Articulação de Coluna", c_coluna),
+                        ("Alongamento de Cadeia Posterior", c_post), ("Estabilização Escapular / Pélvica", c_escap),
+                        ("Evitar Flexões Intensas de Tronco", c_flex), ("Evitar Extensões/Hiperlordose", c_ext),
+                        ("Exercícios de Baixo Impacto Articular", c_baixo), ("Treino de Equilíbrio e Propriocepção", c_equil),
+                        ("Controle e Reeducação Respiratória", c_resp)
+                    ]
+                    for nome_conduta, marcado in mapeamento_condutas_cad:
+                        if marcado: condutas_selecionadas.append(nome_conduta)
+                    if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
+                    
+                    nova_linha = {
+                        "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c, 
+                        "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c, 
+                        "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": " | ".join(condutas_selecionadas), 
+                        "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c, 
+                        "Endereco": f"{endereco_base} {complemento_c}".strip()
+                    }
+                    
+                    df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
+                    conn.update(worksheet="alunos", data=df_alunos.fillna("").astype(str))
+                    st.cache_data.clear()
+                    st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
+                    st.rerun()
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
