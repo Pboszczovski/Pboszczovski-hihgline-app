@@ -131,11 +131,16 @@ try:
     try: df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
     except: df_espera = pd.DataFrame()
     
-    try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
-    except: df_precos = pd.DataFrame()
+    try: 
+        df_precos = limpar_dataframe(ler_dados_planilha("precos"))
+    except: 
+        df_precos = pd.DataFrame()
     
-    try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
-    except: df_evolucoes = pd.DataFrame()
+    # É aqui que o erro de indentação está ocorrendo:
+    try: 
+        df_evolucoes = limpar_dataframe(ler_dados_planilha("evolucao"))
+    except: 
+        df_evolucoes = pd.DataFrame()
 
     if not df_alunos.empty:
         if "Valor Mensal" in df_alunos.columns and "Valor" not in df_alunos.columns:
