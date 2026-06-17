@@ -42,15 +42,17 @@ st.markdown("""
 # FUNÇÕES AUXILIARES DE LIMPEZA E FORMATAÇÃO
 # ==========================================
 def limpiar_dataframe(df):
-    if df is None or df.empty:
+    # 1. Verifica primeiro se o objeto é nulo de forma isolada
+    if df is None:
         return pd.DataFrame()
-    try:
-        df = df.loc[:, ~df.columns.astype(str).str.contains('^Unnamed')]
-        df.columns = df.columns.str.strip()
-        df = df.dropna(how="all")
-    except:
-        return pd.DataFrame()
-    return df
+    
+    # 2. Verifica se é um DataFrame antes de checar se está vazio
+    if isinstance(df, pd.DataFrame):
+        if df.empty:
+            return pd.DataFrame()
+        return df.dropna(how="all")
+        
+    return pd.DataFrame()
 
 def formatar_brl(valor):
     try:
