@@ -1,3 +1,9 @@
+from streamlit_gsheets import GSheetsConnection
+def carregar_dados():
+    # Ele buscará automaticamente a estrutura service_account dentro de [connections.gsheets]
+    conn = st.connection("gsheets", type=GSheetsConnection)
+    df = conn.read(worksheet="Clientes")
+    return df
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
