@@ -98,12 +98,14 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO COM GOOGLE SHEETS (FORÇANDO PRIMEIRA ABA)
+# 2. CONEXÃO COM GOOGLE SHEETS (BLINDADA)
 # ==========================================
 conexao_ok = False
 erro_msg = ""
 
-df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"])
+colunas_oficiais = ["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"]
+
+df_alunos = pd.DataFrame(columns=colunas_oficiais)
 df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Forma", "Categoria", "Status"])
 df_espera = pd.DataFrame(columns=["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"])
 df_precos = pd.DataFrame(columns=["Plano", "Valor"])
@@ -118,31 +120,44 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Lendo a PRIMEIRA guia da planilha (índice 0), ignorando o nome de texto
+    @st.cache_data(ttl=2)
+    def ler_dados_planilha(aba_ou_indice):
+        return conn.read(worksheet=aba_ou_indice)
+    
+    # Lendo a primeira guia (alunos) de forma protegida
     try: 
-        dados_brutos = conn.read(worksheet=0)  # <--- Abre a 1ª aba automaticamente
+        dados_brutos = ler_dados_planilha(0)
         df_alunos = limpiar_dataframe(dados_brutos)
+        
+        # Garante que o DataFrame tenha as colunas corretas mesmo que venha desconfigurado
+        if df_alunos.empty or len(df_alunos.columns) == 0:
+            df_alunos = pd.DataFrame(columns=colunas_oficiais)
+        else:
+            # Se faltar alguma coluna essencial, nós criamos dinamicamente
+            for col in colunas_oficiais:
+                if col not in df_alunos.columns:
+                    df_alunos[col] = ""
+            # Reordenamos para o padrão oficial
+            df_alunos = df_alunos[colunas_oficiais]
     except Exception as e: 
         st.error(f"Erro crítico ao ler aba alunos: {e}")
-        df_alunos = pd.DataFrame()
+        df_alunos = pd.DataFrame(columns=colunas_oficiais)
     
-    # As outras abas continuam normais, mas se preferir pode usar os números das posições delas (1, 2, 3...)
-    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro"))
+    # Leituras adicionais
+    try: df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
     except: df_financeiro = pd.DataFrame()
     
-    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera"))
+    try: df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
     except: df_espera = pd.DataFrame()
     
-    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos"))
+    try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
     except: df_precos = pd.DataFrame()
     
-    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao"))
+    try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
-    if not df_alunos.empty:
-        if "Valor" not in df_alunos.columns:
-            df_alunos["Valor"] = 0.0
-            
+    # Tratamento seguro da coluna de Valor financeiro
+    if not df_alunos.empty and "Valor" in df_alunos.columns:
         valores_corrigidos = []
         for v in df_alunos["Valor"]:
             valores_corrigidos.append(converter_para_float(v))
