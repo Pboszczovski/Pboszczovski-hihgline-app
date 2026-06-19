@@ -103,6 +103,7 @@ def calcular_idade(data_nasc_str):
 conexao_ok = False
 erro_msg = ""
 
+# Lista oficial de colunas para garantir consistência estrutural
 colunas_oficiais = ["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"]
 
 df_alunos = pd.DataFrame(columns=colunas_oficiais)
@@ -133,14 +134,14 @@ try:
         if df_alunos.empty or len(df_alunos.columns) == 0:
             df_alunos = pd.DataFrame(columns=colunas_oficiais)
         else:
-            # Se faltar alguma coluna essencial, nós criamos dinamicamente
+            # Se faltar alguma coluna essencial na leitura, nós criamos dinamicamente
             for col in colunas_oficiais:
                 if col not in df_alunos.columns:
                     df_alunos[col] = ""
-            # Reordenamos para o padrão oficial
+            # Reordenamos para bater com o padrão oficial
             df_alunos = df_alunos[colunas_oficiais]
     except Exception as e: 
-        st.error(f"Erro crítico ao ler aba alunos: {e}")
+        st.error(f"Erro ao ler aba alunos: {e}")
         df_alunos = pd.DataFrame(columns=colunas_oficiais)
     
     # Leituras adicionais
@@ -156,12 +157,9 @@ try:
     try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
-    # Tratamento seguro da coluna de Valor financeiro
+    # Tratamento totalmente seguro da coluna de Valor financeiro
     if not df_alunos.empty and "Valor" in df_alunos.columns:
-        valores_corrigidos = []
-        for v in df_alunos["Valor"]:
-            valores_corrigidos.append(converter_para_float(v))
-        df_alunos["Valor"] = valores_corrigidos
+        df_alunos["Valor"] = df_alunos["Valor"].apply(lambda x: converter_para_float(x) if pd.notna(x) else 0.0)
 
     conexao_ok = True
 except Exception as e:
