@@ -530,6 +530,9 @@ elif menu == "📝 Cadastro":
 
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
+       # ... (código anterior do formulário permanece igual)
+        btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
+        
         if btn_enviar:
             dias_c = "/".join(dias_lista_check)
             horario_c = ", ".join(horarios_selecionados)
@@ -565,15 +568,38 @@ elif menu == "📝 Cadastro":
                     if marcado: condutas_selecionadas.append(nome_conduta)
                 if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
                 
+                # Criamos a nova linha garantindo que os tipos primitivos estejam explícitos (evita o erro All-NULL)
                 nova_linha = {
-                    "Nome": nome_c, "Telefone": tel_c, "Bairro": bairro_c, "Plano": plano_c,
-                    "Valor": float(valor_c), "Vencimento": int(venc_c), "Dias": dias_c, "Horario": horario_c,
-                    "Status": "Ativo", "Queixa": " | ".join(tratamentos), "Conduta": " | ".join(condutas_selecionadas),
-                    "Genero": genero_c, "Nascimento": nasc_c, "Inicio_Aulas": inicio_c, "CPF": cpf_c,
-                    "Endereco": f"{endereco_base} {complemento_c}".strip()
+                    "Nome": str(nome_c).strip(), 
+                    "Telefone": str(tel_c).strip(), 
+                    "Bairro": str(bairro_c).strip(), 
+                    "Plano": str(plano_c),
+                    "Valor Plano": "", # Mantido para preservar o layout antigo da coluna E se necessário
+                    "Vencimento": int(venc_c) if venc_c else 10, 
+                    "Dias": str(dias_c), 
+                    "Horario": str(horario_c),
+                    "Status": "Ativo", 
+                    "Queixa": " | ".join(tratamentos) if tratamentos else "", 
+                    "Conduta": " | ".join(condutas_selecionadas) if condutas_selecionadas else "",
+                    "Genero": str(genero_c), 
+                    "Nascimento": str(nasc_c).strip(), 
+                    "Inicio_Aulas": str(inicio_c).strip(), 
+                    "CPF": str(cpf_c).strip(),
+                    "Valor Mensal": "",
+                    "Endereco": f"{endereco_base} {complemento_c}".strip(),
+                    "Valor": float(valor_c) if valor_c else 0.0
                 }
-                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                conn.update(worksheet="alunos", data=df_alunos.fillna("").astype(str))
+                
+                # Correção do Erro: Criamos o DataFrame novo forçando a mesma estrutura de colunas do original
+                df_novo_aluno = pd.DataFrame([nova_linha], columns=df_alunos.columns)
+                
+                # Concatenamos de forma segura
+                df_alunos = pd.concat([df_alunos, df_novo_aluno], ignore_index=True)
+                
+                # Salvando de volta na aba 0 (para manter o mesmo padrão que deu certo na leitura)
+                df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
+                conn.update(worksheet=0, data=df_alunos_salvar)
+                
                 st.cache_data.clear()
                 st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
                 st.rerun()
