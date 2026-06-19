@@ -71,7 +71,7 @@ def formatar_brl(valor):
 
 def converter_para_float(valor):
     try:
-        if pd.isna(valor) or valor == "" or valor is None:
+        if pd.isna(valor) or valor == "" or valor is None or str(valor).strip() == "":
             return 0.0
         if isinstance(valor, (int, float)):
             return float(valor)
@@ -98,7 +98,7 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO COM GOOGLE SHEETS (COM CACHE)
+# 2. CONEXÃO COM GOOGLE SHEETS
 # ==========================================
 conexao_ok = False
 erro_msg = ""
@@ -118,7 +118,7 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    @st.cache_data(ttl=15)
+    @st.cache_data(ttl=5)
     def ler_dados_planilha(aba):
         return conn.read(worksheet=aba)
     
@@ -137,10 +137,12 @@ try:
     try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
+    # Tratamento seguro para a coluna Valor (mesmo se estiver vazia no Sheets)
     if not df_alunos.empty:
-        if "Valor Plano" in df_alunos.columns and "Valor" not in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor Plano"]
-        elif "Valor Plano" in df_alunos.columns and "Valor" in df_alunos.columns:
+        if "Valor" not in df_alunos.columns:
+            df_alunos["Valor"] = 0.0
+        
+        if "Valor Plano" in df_alunos.columns:
             df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Plano"])
             
         df_alunos["Valor"] = df_alunos["Valor"].apply(converter_para_float)
@@ -476,7 +478,6 @@ elif menu == "📝 Cadastro":
     with col_p2:
         valor_c = st.number_input("Valor Combinado Mensal (R$):", value=valor_sugerido_plano, step=10.0)
 
-    # --- VALIDAÇÃO EM TEMPO REAL ---
     st.subheader("📌 Escolha de Dias e Horários de Treino")
     c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
     with c_dia1: d_seg = st.checkbox("SEG")
@@ -618,7 +619,7 @@ elif menu == "📝 Cadastro":
 
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
-    st.title("📈 Evolução Clínica dos Alunos")
+    st.title("📈 Evolução Clinical dos Alunos")
     lista_nomes_alunos = []
     if not df_alunos.empty and "Nome" in df_alunos.columns:
         df_limpo_nomes = df_alunos.dropna(subset=["Nome"])
@@ -669,13 +670,13 @@ elif menu == "⏳ Espera":
         st.info("Nenhum interessado aguardando vaga.")
         
     with st.form("form_espera", clear_on_submit=True):
-        nome_esp = st.text_input("Nome do Interessado:")
+        username_esp = st.text_input("Nome do Interessado:")
         tel_esp = st.text_input("Telefone de Contato:")
         dia_esp = st.text_input("Dia da Semana de Preferência (Ex: TER/QUI):")
         hora_esp = st.text_input("Horário de Preferência (Ex: 18:30):")
-        if st.form_submit_button("Adicionar à Lista") and nome_esp:
+        if st.form_submit_button("Adicionar à Lista") and username_esp:
             nova_esp_row = {
-                "Nome": str(nome_esp).strip(),
+                "Nome": str(username_esp).strip(),
                 "Telefone": str(tel_esp).strip(),
                 "Dia Preferencia": str(dia_esp).upper().strip(),
                 "Hora Preferencia": str(hora_esp).strip()
@@ -791,7 +792,7 @@ elif menu == "⚙️ Preços":
                 df_atualizado_precos["Valor"] = df_atualizado_precos["Valor"].apply(converter_para_float)
                 conn.update(worksheet="precos", data=df_atualizado_precos.fillna("").astype(str))
                 st.cache_data.clear()
-                st.success("⚙️ Preços atualizados com sucesso!")
+                st.success("⚙️ Preços updated com sucesso!")
                 st.rerun()
 
 # --- 9. TELA: ARQUIVO MORTO ---
