@@ -531,66 +531,7 @@ elif menu == "📝 Cadastro":
         # CORREÇÃO 1: Apenas uma declaração do botão de envio aqui
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
-        if btn_enviar:
-            dias_c = "/".join(dias_lista_check)
-            horario_c = ", ".join(horarios_selecionados)
-
-            if not dias_c or not horario_c:
-                st.error("❌ Selecione pelo menos um Dia e Horário na seção superior!")
-            elif not nome_c or not tel_c:
-                st.error("❌ Preencha os campos obrigatórios: Nome e WhatsApp!")
-            elif not pode_gravar:
-                st.error("❌ Impossível salvar. Há um conflito de horário ativo (Limite de 3 alunos excedido). Altere os dias/horários acima.")
-            else:
-                tratamentos = []
-                mapeamento_cadastro = [
-                    ("Dor Lombar (Lombalgia)", t_lombar), ("Hérnia de Disco / Protrusão", t_hernia),
-                    ("Dor / Lesão nos Ombros", t_ombros), ("Dor Cervical (Cervicalgia)", t_cervical),
-                    ("Dor / Lesão nos Joelhos", t_joelhos), ("Melhoria Postural Operacional", t_postural),
-                    ("Pilates para Gestantes", t_gestante), ("Pilates para Terceira Idade (Idosos)", t_idoso),
-                    ("Condicionamento Físico Geral", t_condic)
-                ]
-                for nome_queixa, marcado in mapeamento_cadastro:
-                    if marcado: tratamentos.append(nome_queixa)
-                if queixa_extra.strip(): tratamentos.append(queixa_extra.strip())
-                
-                condutas_selecionadas = []
-                mapeamento_condutas_cad = [
-                    ("Fortalecimento de Core (Powerhouse)", c_core), ("Mobilização e Articulação de Coluna", c_coluna),
-                    ("Alongamento de Cadeia Posterior", c_post), ("Estabilização Escapular / Pélvica", c_escap),
-                    ("Evitar Flexões Intensas de Tronco", c_flex), ("Evitar Extensões/Hiperlordose", c_ext),
-                    ("Exercícios de Baixo Impacto Articular", c_baixo), ("Treino de Equilíbrio e Propriocepção", c_equil),
-                    ("Controle e Reeducação Respiratória", c_resp)
-                ]
-                for nome_conduta, marcado in mapeamento_condutas_cad:
-                    if marcado: condutas_selecionadas.append(nome_conduta)
-                if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
-                
-                # Lista explícita com a ordem exata das colunas baseadas no Sheets
-                colunas_oficiais = ["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"]
-                
-                nova_linha = {
-                    "Nome": str(nome_c).strip(), 
-                    "Telefone": str(tel_c).strip(), 
-                    "Bairro": str(bairro_c).strip(), 
-                    "Plano": str(plano_c),
-                    "Valor Plano": "", 
-                    "Vencimento": int(venc_c) if venc_c else 10, 
-                    "Dias": str(dias_c), 
-                    "Horario": str(horario_c),
-                    "Status": "Ativo", 
-                    "Queixa": " | ".join(tratamentos) if tratamentos else "", 
-                    "Conduta": " | ".join(condutas_selecionadas) if condutas_selecionadas else "",
-                    "Genero": str(genero_c), 
-                    "Nascimento": str(nasc_c).strip(), 
-                    "Inicio_Aulas": str(inicio_c).strip(), 
-                    "CPF": str(cpf_c).strip(),
-                    "Valor Mensal": "",
-                    "Endereco": f"{endereco_base} {complemento_c}".strip(),
-                    "Valor": float(valor_c) if valor_c else 0.0
-                }
-                
-                # CORREÇÃO 2: Forçamos a criação do DataFrame usando a lista 'colunas_oficiais' fixa em vez de 'df_alunos.columns'
+       # [ESTA LINHA JÁ EXISTE NO SEU CÓDIGO] - Criamos o DataFrame usando as colunas oficiais
                 df_novo_aluno = pd.DataFrame([nova_linha], columns=colunas_oficiais)
                 
                 # Garantimos que a tabela principal na memória use as mesmas colunas antes de juntar
@@ -602,15 +543,16 @@ elif menu == "📝 Cadastro":
                 # Juntamos os dados de forma totalmente segura
                 df_alunos = pd.concat([df_alunos, df_novo_aluno], ignore_index=True)
                 
-                # Conversão limpa para texto antes do envio à API do Sheets
+                # >>> CORREÇÃO DO ERRO AQUI: Criamos explicitamente a variável df_alunos_salvar <<<
                 df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
                 
+                # Enviamos para a planilha usando a variável correta
                 conn.update(worksheet=0, data=df_alunos_salvar)
                 
+                # Limpa o cache e recarrega a página com o sucesso
                 st.cache_data.clear()
                 st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
                 st.rerun()
-
 # --- 4. TELA: EVOLUÇÃO ---
 elif menu == "📈 Evolução":
     st.title("📈 Evolução Clinical dos Alunos")
