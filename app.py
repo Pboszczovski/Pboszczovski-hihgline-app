@@ -98,12 +98,13 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO COM GOOGLE SHEETS
+# 2. CONEXÃO COM GOOGLE SHEETS (CORRIGIDA)
 # ==========================================
 conexao_ok = False
 erro_msg = ""
 
-df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Endereco"])
+# Criamos a estrutura base com as colunas exatamente na ordem da imagem image_e9b3e2.png
+df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"])
 df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Forma", "Categoria", "Status"])
 df_espera = pd.DataFrame(columns=["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"])
 df_precos = pd.DataFrame(columns=["Plano", "Valor"])
@@ -118,12 +119,18 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    @st.cache_data(ttl=5)
+    # Reduzimos o TTL para 2 segundos para atualizar mais rápido enquanto testamos
+    @st.cache_data(ttl=2)
     def ler_dados_planilha(aba):
         return conn.read(worksheet=aba)
     
-    try: df_alunos = limpiar_dataframe(ler_dados_planilha("alunos"))
-    except: df_alunos = pd.DataFrame()
+    # Lendo a aba alunos de forma isolada e protegida
+    try: 
+        dados_brutos = ler_dados_planilha("alunos")
+        df_alunos = limpiar_dataframe(dados_brutos)
+    except Exception as e: 
+        st.error(f"Erro crítico ao ler aba alunos: {e}")
+        df_alunos = pd.DataFrame()
     
     try: df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
     except: df_financeiro = pd.DataFrame()
@@ -137,60 +144,22 @@ try:
     try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
-    # Tratamento seguro para a coluna Valor (mesmo se estiver vazia no Sheets)
+    # TRATAMENTO BLINDADO PARA A VALIDAÇÃO DE VALORES (IMPERSISTENTE A ERROS)
     if not df_alunos.empty:
+        # Se a coluna 'Valor' (Coluna R da imagem) existir, usamos ela. Caso contrário, criamos.
         if "Valor" not in df_alunos.columns:
             df_alunos["Valor"] = 0.0
-        
-        if "Valor Plano" in df_alunos.columns:
-            df_alunos["Valor"] = df_alunos["Valor"].fillna(df_alunos["Valor Plano"])
             
-        df_alunos["Valor"] = df_alunos["Valor"].apply(converter_para_float)
+        # Forçamos a conversão de cada linha de forma individual. Se falhar, vira 0.0 em vez de quebrar o app.
+        valores_corrigidos = []
+        for v in df_alunos["Valor"]:
+            valores_corrigidos.append(converter_para_float(v))
+        df_alunos["Valor"] = valores_corrigidos
 
     conexao_ok = True
 except Exception as e:
     erro_msg = str(e)
-
-if df_precos is None or df_precos.empty or "Plano" not in df_precos.columns:
-    df_precos = pd.DataFrame([
-        {"Plano": "1x semana", "Valor": 180.0},
-        {"Plano": "2x semana", "Valor": 220.0},
-        {"Plano": "3x semana", "Valor": 300.0}
-    ])
-
-dict_precos_padrao = {}
-for _, r in df_precos.iterrows():
-    dict_precos_padrao[str(r["Plano"])] = converter_para_float(r["Valor"])
-
-def verificar_lotacao(df, dias_input, horarios_input_list, aluno_ignorados=None):
-    if df is None or df.empty or "Status" not in df.columns or "Dias" not in df.columns or "Horario" not in df.columns:
-        return [], []
-        
-    df_ativos = df[df["Status"].astype(str).str.upper() == "ATIVO"]
-    if aluno_ignorados:
-        df_ativos = df_ativos[df_ativos["Nome"] != aluno_ignorados]
-        
-    dias_solicitados = [d.strip().upper() for d in str(dias_input).replace("/", " ").replace(",", " ").split() if d.strip()]
-    horarios_solicitados = [str(h).strip() for h in horarios_input_list if str(h).strip()]
-    
-    if not horarios_solicitados or not dias_solicitados:
-        return [], []
-        
-    conflitos = []
-    for h_alvo in horarios_solicitados:
-        for dia in dias_solicitados:
-            qtd_no_bloco = 0
-            for idx, row in df_ativos.iterrows():
-                h_atual = str(row["Horario"]).strip()
-                if h_alvo in h_atual:
-                    d_atual = [d.strip().upper() for d in str(row["Dias"]).replace("/", " ").replace(",", " ").split() if d.strip()]
-                    if dia in d_atual:
-                        qtd_no_bloco += 1
-            if qtd_no_bloco >= 3:
-                conflitos.append((dia, h_alvo, qtd_no_bloco))
-                
-    return conflitos, []
-
+    conexao_ok = False
 # ==========================================
 # 3. BARRA LATERAL - LOGO LOCAL E MENU
 # ==========================================
