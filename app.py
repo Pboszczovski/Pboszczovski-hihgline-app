@@ -98,12 +98,11 @@ def calcular_idade(data_nasc_str):
         return None
 
 # ==========================================
-# 2. CONEXÃO COM GOOGLE SHEETS (CORRIGIDA)
+# 2. CONEXÃO COM GOOGLE SHEETS (FORÇANDO PRIMEIRA ABA)
 # ==========================================
 conexao_ok = False
 erro_msg = ""
 
-# Criamos a estrutura base com as colunas exatamente na ordem da imagem image_e9b3e2.png
 df_alunos = pd.DataFrame(columns=["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"])
 df_financeiro = pd.DataFrame(columns=["Aluno", "Valor", "Data", "Forma", "Categoria", "Status"])
 df_espera = pd.DataFrame(columns=["Nome", "Telefone", "Dia Preferencia", "Hora Preferencia"])
@@ -119,38 +118,31 @@ try:
 
     conn = st.connection("gsheets", type=GSheetsConnection)
     
-    # Reduzimos o TTL para 2 segundos para atualizar mais rápido enquanto testamos
-    @st.cache_data(ttl=2)
-    def ler_dados_planilha(aba):
-        return conn.read(worksheet=aba)
-    
-    # Lendo a aba alunos de forma isolada e protegida
+    # Lendo a PRIMEIRA guia da planilha (índice 0), ignorando o nome de texto
     try: 
-        dados_brutos = ler_dados_planilha("alunos")
+        dados_brutos = conn.read(worksheet=0)  # <--- Abre a 1ª aba automaticamente
         df_alunos = limpiar_dataframe(dados_brutos)
     except Exception as e: 
         st.error(f"Erro crítico ao ler aba alunos: {e}")
         df_alunos = pd.DataFrame()
     
-    try: df_financeiro = limpiar_dataframe(ler_dados_planilha("financeiro"))
+    # As outras abas continuam normais, mas se preferir pode usar os números das posições delas (1, 2, 3...)
+    try: df_financeiro = limpiar_dataframe(conn.read(worksheet="financeiro"))
     except: df_financeiro = pd.DataFrame()
     
-    try: df_espera = limpiar_dataframe(ler_dados_planilha("espera"))
+    try: df_espera = limpiar_dataframe(conn.read(worksheet="espera"))
     except: df_espera = pd.DataFrame()
     
-    try: df_precos = limpiar_dataframe(ler_dados_planilha("precos"))
+    try: df_precos = limpiar_dataframe(conn.read(worksheet="precos"))
     except: df_precos = pd.DataFrame()
     
-    try: df_evolucoes = limpiar_dataframe(ler_dados_planilha("evolucao"))
+    try: df_evolucoes = limpiar_dataframe(conn.read(worksheet="evolucao"))
     except: df_evolucoes = pd.DataFrame()
 
-    # TRATAMENTO BLINDADO PARA A VALIDAÇÃO DE VALORES (IMPERSISTENTE A ERROS)
     if not df_alunos.empty:
-        # Se a coluna 'Valor' (Coluna R da imagem) existir, usamos ela. Caso contrário, criamos.
         if "Valor" not in df_alunos.columns:
             df_alunos["Valor"] = 0.0
             
-        # Forçamos a conversão de cada linha de forma individual. Se falhar, vira 0.0 em vez de quebrar o app.
         valores_corrigidos = []
         for v in df_alunos["Valor"]:
             valores_corrigidos.append(converter_para_float(v))
