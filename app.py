@@ -454,7 +454,6 @@ elif menu == "📝 Cadastro":
     with col_p2:
         valor_c = st.number_input("Valor Combinado Mensal (R$):", value=valor_sugerido_plano, step=10.0)
 
-    # --- VALIDAÇÃO EM TEMPO REAL EM CIMA DO FORMULÁRIO ---
     st.subheader("📌 Escolha de Dias e Horários de Treino")
     c_dia1, c_dia2, c_dia3, c_dia4, c_dia5, c_dia6 = st.columns(6)
     with c_dia1: d_seg = st.checkbox("SEG")
@@ -473,11 +472,9 @@ elif menu == "📝 Cadastro":
             if st.checkbox(hora_item, key=f"cad_h_{hora_item}"):
                 horarios_selecionados.append(hora_item)
 
-    # Processa os dias selecionados para a checagem em tempo real
     dias_lista_check = [dia for dia, marcado in [("SEG", d_seg), ("TER", d_ter), ("QUA", d_qua), ("QUI", d_qui), ("SEX", d_sex), ("SAB", d_sab)] if marcado]
     dias_c_check = "/".join(dias_lista_check)
 
-    # Checagem preventiva de vagas
     pode_gravar = True
     if dias_lista_check and horarios_selecionados:
         conflitos_preventivos, _ = verificar_lotacao(df_alunos, dias_c_check, horarios_selecionados)
@@ -488,7 +485,6 @@ elif menu == "📝 Cadastro":
         else:
             st.success("✅ Dias e horários disponíveis para agendamento!")
 
-    # Formulário para os dados do aluno
     with st.form("form_dados_anamnese_completo", clear_on_submit=False):
         st.subheader("2. Dados Pessoais do Aluno")
         nome_c = st.text_input("Nome Completo:")
@@ -546,13 +542,13 @@ elif menu == "📝 Cadastro":
             c_resp = st.checkbox("Controle e Reeducação Respiratória", key="k_c_resp")
             
         conduta_extra = st.text_input("Outras Condutas Específicas / Observações Clínicas Extras:")
-        
+
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
         if btn_enviar:
             dias_c = "/".join(dias_lista_check)
             horario_c = ", ".join(horarios_selecionados)
-            
+
             if not dias_c or not horario_c:
                 st.error("❌ Selecione pelo menos um Dia e Horário na seção superior!")
             elif not nome_c or not tel_c:
@@ -560,65 +556,67 @@ elif menu == "📝 Cadastro":
             elif not pode_gravar:
                 st.error("❌ Impossível salvar. Há um conflito de horário ativo (Limite de 3 alunos excedido). Altere os dias/horários acima.")
             else:
-                # Mapeamento das Queixas
                 tratamentos = []
                 mapeamento_cadastro = [
-                    ("Dor Lombar (Lombalgia)", t_lombar),
-                    ("Hérnia de Disco / Protrusão", t_hernia),
-                    ("Dor / Lesão nos Ombros", t_ombros),
-                    ("Dor Cervical (Cervicalgia)", t_cervical),
-                    ("Dor / Lesão nos Joelhos", t_joelhos),
-                    ("Melhoria Postural Operacional", t_postural),
-                    ("Pilates para Gestantes", t_gestante),
-                    ("Pilates para Terceira Idade (Idosos)", t_idoso),
+                    ("Dor Lombar (Lombalgia)", t_lombar), ("Hérnia de Disco / Protrusão", t_hernia),
+                    ("Dor / Lesão nos Ombros", t_ombros), ("Dor Cervical (Cervicalgia)", t_cervical),
+                    ("Dor / Lesão nos Joelhos", t_joelhos), ("Melhoria Postural Operacional", t_postural),
+                    ("Pilates para Gestantes", t_gestante), ("Pilates para Terceira Idade (Idosos)", t_idoso),
                     ("Condicionamento Físico Geral", t_condic)
                 ]
                 for nome_queixa, marcado in mapeamento_cadastro:
-                    if marcado:
-                        tratamentos.append(nome_queixa)
-                if queixa_extra.strip():
-                    tratamentos.append(queixa_extra.strip())
+                    if marcado: tratamentos.append(nome_queixa)
+                if queixa_extra.strip(): tratamentos.append(queixa_extra.strip())
                 
-                # Mapeamento das Condutas
                 condutas_selecionadas = []
                 mapeamento_condutas_cad = [
-                    ("Fortalecimento de Core (Powerhouse)", c_core),
-                    ("Mobilização e Articulação de Coluna", c_coluna),
-                    ("Alongamento de Cadeia Posterior", c_post),
-                    ("Estabilização Escapular / Pélvica", c_escap),
-                    ("Evitar Flexões Intensas de Tronco", c_flex),
-                    ("Evitar Extensões/Hiperlordose", c_ext),
-                    ("Exercícios de Baixo Impacto Articular", c_baixo),
-                    ("Treino de Equilíbrio e Propriocepção", c_equil),
+                    ("Fortalecimento de Core (Powerhouse)", c_core), ("Mobilização e Articulação de Coluna", c_coluna),
+                    ("Alongamento de Cadeia Posterior", c_post), ("Estabilização Escapular / Pélvica", c_escap),
+                    ("Evitar Flexões Intensas de Tronco", c_flex), ("Evitar Extensões/Hiperlordose", c_ext),
+                    ("Exercícios de Baixo Impacto Articular", c_baixo), ("Treino de Equilíbrio e Propriocepção", c_equil),
                     ("Controle e Reeducação Respiratória", c_resp)
                 ]
                 for nome_conduta, marcado in mapeamento_condutas_cad:
-                    if marcado:
-                        condutas_selecionadas.append(nome_conduta)
-                if conduta_extra.strip():
-                    condutas_selecionadas.append(conduta_extra.strip())
+                    if marcado: condutas_selecionadas.append(nome_conduta)
+                if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
+                
+                colunas_oficiais = ["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"]
                 
                 nova_linha = {
-                    "Nome": nome_c,
-                    "Telefone": tel_c,
-                    "Bairro": bairro_c,
-                    "Plano": plano_c,
-                    "Valor": float(valor_c),
-                    "Vencimento": int(venc_c),
-                    "Dias": dias_c,
-                    "Horario": horario_c,
-                    "Status": "Ativo",
-                    "Queixa": " | ".join(tratamentos),
-                    "Conduta": " | ".join(condutas_selecionadas),
-                    "Genero": genero_c,
-                    "Nascimento": nasc_c,
-                    "Inicio_Aulas": inicio_c,
-                    "CPF": cpf_c,
-                    "Endereco": f"{endereco_base} {complemento_c}".strip()
+                    "Nome": str(nome_c).strip(), 
+                    "Telefone": str(tel_c).strip(), 
+                    "Bairro": str(bairro_c).strip(), 
+                    "Plano": str(plano_c),
+                    "Valor Plano": str(valor_c), # Mantém sincronizado com o campo de texto se necessário
+                    "Vencimento": int(venc_c) if venc_c else 10, 
+                    "Dias": str(dias_c), 
+                    "Horario": str(horario_c),
+                    "Status": "Ativo", 
+                    "Queixa": " | ".join(tratamentos) if tratamentos else "", 
+                    "Conduta": " | ".join(condutas_selecionadas) if condutas_selecionadas else "",
+                    "Genero": str(genero_c), 
+                    "Nascimento": str(nasc_c).strip(), 
+                    "Inicio_Aulas": str(inicio_c).strip(), 
+                    "CPF": str(cpf_c).strip(),
+                    "Valor Mensal": str(valor_c),
+                    "Endereco": f"{endereco_base} {complemento_c}".strip(),
+                    "Valor": float(valor_c) if valor_c else 0.0
                 }
                 
-                df_alunos = pd.concat([df_alunos, pd.DataFrame([nova_linha])], ignore_index=True)
-                conn.update(worksheet="alunos", data=df_alunos.fillna("").astype(str))
+                df_novo_aluno = pd.DataFrame([nova_linha], columns=colunas_oficiais)
+                
+                if df_alunos.empty or len(df_alunos.columns) == 0:
+                    df_alunos = pd.DataFrame(columns=colunas_oficiais)
+                else:
+                    df_alunos.columns = colunas_oficiais
+                
+                df_alunos = pd.concat([df_alunos, df_novo_aluno], ignore_index=True)
+                
+                # CORREÇÃO DEFINITIVA DO DROP: Removido o comando que tentava dropar a coluna 'Valor'
+                df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
+                
+                conn.update(worksheet=0, data=df_alunos_salvar)
+                
                 st.cache_data.clear()
                 st.success(f"🎉 Aluno {nome_c} adicionado com sucesso!")
                 st.rerun()
