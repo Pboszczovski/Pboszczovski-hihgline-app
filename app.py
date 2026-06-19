@@ -528,9 +528,7 @@ elif menu == "📝 Cadastro":
             
         conduta_extra = st.text_input("Outras Condutas Específicas / Observações Clínicas Extras:")
 
-        btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
-        
-       # ... (código anterior do formulário permanece igual)
+        # CORREÇÃO 1: Apenas uma declaração do botão de envio aqui
         btn_enviar = st.form_submit_button("💾 Salvar Novo Aluno")
         
         if btn_enviar:
@@ -568,13 +566,15 @@ elif menu == "📝 Cadastro":
                     if marcado: condutas_selecionadas.append(nome_conduta)
                 if conduta_extra.strip(): condutas_selecionadas.append(conduta_extra.strip())
                 
-                # Criamos a nova linha garantindo que os tipos primitivos estejam explícitos (evita o erro All-NULL)
+                # Lista explícita com a ordem exata das colunas baseadas no Sheets
+                colunas_oficiais = ["Nome", "Telefone", "Bairro", "Plano", "Valor Plano", "Vencimento", "Dias", "Horario", "Status", "Queixa", "Conduta", "Genero", "Nascimento", "Inicio_Aulas", "CPF", "Valor Mensal", "Endereco", "Valor"]
+                
                 nova_linha = {
                     "Nome": str(nome_c).strip(), 
                     "Telefone": str(tel_c).strip(), 
                     "Bairro": str(bairro_c).strip(), 
                     "Plano": str(plano_c),
-                    "Valor Plano": "", # Mantido para preservar o layout antigo da coluna E se necessário
+                    "Valor Plano": "", 
                     "Vencimento": int(venc_c) if venc_c else 10, 
                     "Dias": str(dias_c), 
                     "Horario": str(horario_c),
@@ -590,14 +590,21 @@ elif menu == "📝 Cadastro":
                     "Valor": float(valor_c) if valor_c else 0.0
                 }
                 
-                # Correção do Erro: Criamos o DataFrame novo forçando a mesma estrutura de colunas do original
-                df_novo_aluno = pd.DataFrame([nova_linha], columns=df_alunos.columns)
+                # CORREÇÃO 2: Forçamos a criação do DataFrame usando a lista 'colunas_oficiais' fixa em vez de 'df_alunos.columns'
+                df_novo_aluno = pd.DataFrame([nova_linha], columns=colunas_oficiais)
                 
-                # Concatenamos de forma segura
+                # Garantimos que a tabela principal na memória use as mesmas colunas antes de juntar
+                if df_alunos.empty or len(df_alunos.columns) == 0:
+                    df_alunos = pd.DataFrame(columns=colunas_oficiais)
+                else:
+                    df_alunos.columns = colunas_oficiais
+                
+                # Juntamos os dados de forma totalmente segura
                 df_alunos = pd.concat([df_alunos, df_novo_aluno], ignore_index=True)
                 
-                # Salvando de volta na aba 0 (para manter o mesmo padrão que deu certo na leitura)
+                # Conversão limpa para texto antes do envio à API do Sheets
                 df_alunos_salvar = df_alunos.fillna("").astype(str).replace("nan", "")
+                
                 conn.update(worksheet=0, data=df_alunos_salvar)
                 
                 st.cache_data.clear()
